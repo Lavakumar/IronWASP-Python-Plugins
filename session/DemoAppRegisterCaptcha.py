@@ -21,21 +21,9 @@ class DemoAppRegisterCapctha(SessionPlugin):
 			Req.Body.Set("captcha",cap_str)
 		return Req
 
-	#Override the Login method with custom code to login and return a updated Request. Called internally by DoLogin() with syncing. Returns Request
-	def Login(self, Req, Res):
-		return Req
-
-	#Override the CanInject method to provide a filter for parameters that should not be injected/tested. Returns boolean
-	def CanInject(self, Scnr, Req):
-		return True
-
 	#Override the ProcessInjection method to update the Payload before it is injected. Returns String
 	def ProcessInjection(self, Scnr, Req, Payload):
 		return Payload
-
-	#Override the GetBaseLine method to customize the base-line response returned to the Scanner. Returns Response
-	def GetBaseLine(self, Scnr, Req):
-		return Scnr.Inject()
 
 	#Override the PrepareForInjection method to make changes to the request or perform other steps before injecting. Returns Request
 	def PrepareForInjection(self, Req):
