@@ -581,4 +581,5 @@ p = SQLInjection()
 p.SetUp()
 p.Name = "SQLi"
 p.Description = "Plugin to discover SQL Injection vulnerabilities"
+p.Version = "0.1"
 ActivePlugin.Add(p)

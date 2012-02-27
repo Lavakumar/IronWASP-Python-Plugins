@@ -49,32 +49,36 @@ class SessionAnalysis(PassivePlugin):
 				break
 		
 		for word in login_usernames:
-			if(re.search(word, Req.BodyString, re.I)):
-				username_check_pass = True
-				username_parameter = word
-				break
+			for param in Req.Body.GetNames():
+				if word == param.lower():
+					username_check_pass = True
+					username_parameter = word
+					break
 		
 		for word in login_passwords:
-			if(re.search(word, Req.BodyString, re.I)):
-				password_check_pass = True
-				password_parameter = word
-				break
+			for param in Req.Body.GetNames():
+				if word == param.lower():
+					password_check_pass = True
+					password_parameter = word
+					break
 				
 		if(not username_check_pass):
 			for word in login_usernames:
-				if(re.search(word, Req.Url, re.I)):
-					username_check_pass = True
-					username_parameter = word
-					username_in_url = True
-					break
+				for param in Req.Query.GetNames():
+					if word == param.lower():
+						username_check_pass = True
+						username_parameter = word
+						username_in_url = True
+						break
 		
 		if(not password_check_pass):
 			for word in login_passwords:
-				if(re.search(word, Req.Url, re.I)):
-					password_check_pass = True
-					password_parameter = word
-					password_in_url = True
-					break
+				for param in Req.Query.GetNames():
+					if word == param.lower():
+						password_check_pass = True
+						password_parameter = word
+						password_in_url = True
+						break
 		
 		if((url_check_pass and username_check_pass) or password_check_pass):
 			if(password_in_url):
@@ -130,6 +134,7 @@ class SessionAnalysis(PassivePlugin):
 p = SessionAnalysis()
 p.Name = "Session Analysis"
 p.Description = "Passive plugin to analyze the Session for potential vulnerabilities"
+p.Version = "0.1"
 p.FileName = "SessionAnalysis.py"
 p.WorksOn = PluginWorksOn.Response
 PassivePlugin.Add(p)
