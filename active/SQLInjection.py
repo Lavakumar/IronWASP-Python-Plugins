@@ -19,11 +19,11 @@ class SQLInjection(ActivePlugin):
 		ThreadStore.Put("Scanner",Scnr)
 		Scnr.StartTrace()
 		
-		Scnr.Trace("<i<br>><i<h>>Getting a baseline response:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Getting a baseline response:<i</h>>")
 		base_res_random_str = Tools.GetRandomString(3,4)
-		Scnr.RequestTrace("	Injected random string - " + base_res_random_str)
+		Scnr.RequestTrace("	Injected random string - {0}".format(base_res_random_str))
 		base_response = Scnr.Inject(base_res_random_str)
-		Scnr.ResponseTrace(" ==> Code-" + str(base_response.Code) + " Length-" + str(base_response.BodyLength))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(base_response.Code), str(base_response.BodyLength)))
 		ThreadStore.Put("base_response",base_response)
 		#Scnr.Trace("<i<br>><i<h>>Baseline Response Details:\n<i</h>>")
 		#Scnr.Trace("	Code -" + str(Scnr.BaseResponse.Code) + " Length -" + str(Scnr.BaseResponse.BodyLength))
@@ -48,12 +48,12 @@ class SQLInjection(ActivePlugin):
 		#	return
 
 	def CheckForErrorBasedSQLi(self, Req, Scnr):
-		Scnr.Trace("<i<br>><i<h>>Checking for Error based Injection:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Checking for Error based Injection:<i</h>>")
 		payload_responses = []
 		payloads = ["'","\"","\xBF'\"(","(",")"]
 		final_error_score = 0
 		for payload in payloads:
-			Scnr.RequestTrace("  Injected " + payload + " - ")
+			Scnr.RequestTrace("  Injected {0} - ".format(payload))
 			inj_res = Scnr.Inject(payload)
 			score = self.AnalyseInjectionResultForError(payload, inj_res)
 			if score > final_error_score:
@@ -71,21 +71,21 @@ class SQLInjection(ActivePlugin):
 		res_code_score = 0
 		
 		if res.Code != base_response.Code :
-			self.SetTraceTitle("Response Code(" + str(res.Code) + ") varies from baseline")
+			self.SetTraceTitle("Response Code({0}) varies from baseline".format(str(res.Code)))
 		
 		#check if the response is a 500
 		if(base_response.Code < 500):
 			if(res.Code > 499):
-				Scnr.ResponseTrace("<i<cr>>Injection Response Code - " + str(res.Code) + " . Normal Response Code - " + str(base_response.Code) + "<i</cr>>")
+				Scnr.ResponseTrace("<i<cr>>Injection Response Code - {0}. Normal Response Code - {1}<i</cr>>".format(str(res.Code), str(base_response.Code)))
 				res_code_score = 3
 		
 		#check if the response status is different than the baseline status, ignore 404s
 		if(res_code_score == 0):
 			if(res.Code != base_response.Code and (res.Code < 400 or  res.Code > 499)):
 				res_code_score = 1
-				Scnr.ResponseTrace("<i<cr>>Injection Response Code - " + str(res.Code) + " . Normal Response Code - " + str(base_response.Code) + "<i</cr>>")
+				Scnr.ResponseTrace("<i<cr>>Injection Response Code - {0}. Normal Response Code - {1}<i</cr>>".format(str(res.Code), str(base_response.Code)))
 			else:
-				Scnr.ResponseTrace("Injection Response Code - " + str(res.Code) + " . Normal Response Code - " + str(base_response.Code))
+				Scnr.ResponseTrace("Injection Response Code - {0}. Normal Response Code - {1}".format(str(res.Code), str(base_response.Code)))
 				
 		error_score = 0
 		for i in range(len(self.error_regex)):
@@ -101,7 +101,7 @@ class SQLInjection(ActivePlugin):
 		
 		if(len(all_error_matches) > 0):
 			for error_key,(inj_matches,base_matches) in all_error_matches.items():
-				Scnr.Trace("	    <i<cr>>Got " + str(inj_matches) + " occurance[s] of error signature. Normal Response Had " + str(base_matches) + " occurance[s]<i</cr>>. <i<b>>Error Signature:<i</b>> " + error_key)
+				Scnr.Trace("	    <i<cr>>Got {0} occurance[s] of error signature. Normal Response had {1} occurance[s]<i</cr>>. <i<b>>Error Signature:<i</b>> {2}".format(str(inj_matches), str(base_matches), error_key))
 				if diff_error_no:
 					error_score = 7
 				else:
@@ -112,13 +112,13 @@ class SQLInjection(ActivePlugin):
 		if(error_score > 0):
 			self.AddToTriggers(payload, "\r\n".join(triggers))
 		elif(res_code_score > 0):
-			self.AddToTriggers(payload, str(res.Code) + " " + res.Status)
+			self.AddToTriggers(payload, "{0} {1}".format(str(res.Code), res.Status))
 		
 		return (error_score + res_code_score)
 
 		
 	def CheckForBlindSQLi(self, Req, Scnr):
-		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection:<i</h>>")
 		is_int = False
 		int_value = 0
 		str_value = ""
@@ -128,19 +128,19 @@ class SQLInjection(ActivePlugin):
 			is_int = True
 		except:
 			pass
-		Scnr.Trace("<i<br>><i<h>>Getting a baseline DiffLevel in three responses for same paramter value:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Getting a baseline DiffLevel in three responses for same paramter value:<i</h>>")
 		Scnr.RequestTrace("  Sending first request(A) ")
 		first_normal_response = Scnr.Inject(Scnr.PreInjectionParameterValue)
-		Scnr.ResponseTrace(" ==> Code-" + str(first_normal_response.Code) + " Length-" + str(first_normal_response.BodyLength))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(first_normal_response.Code), str(first_normal_response.BodyLength)))
 		Scnr.RequestTrace("  Sending second request(B)")
 		second_normal_response = Scnr.Inject(Scnr.PreInjectionParameterValue)
-		Scnr.ResponseTrace(" ==> Code-" + str(first_normal_response.Code) + " Length-" + str(first_normal_response.BodyLength))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(first_normal_response.Code), str(first_normal_response.BodyLength)))
 		Scnr.RequestTrace("  Sending first request(A) ")
 		first_normal_response = Scnr.Inject(Scnr.PreInjectionParameterValue)
-		Scnr.ResponseTrace(" ==> Code-" + str(first_normal_response.Code) + " Length-" + str(first_normal_response.BodyLength))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(first_normal_response.Code), str(first_normal_response.BodyLength)))
 		Scnr.RequestTrace("  Sending third request(C)")
 		third_normal_response = Scnr.Inject(Scnr.PreInjectionParameterValue)
-		Scnr.ResponseTrace(" ==> Code-" + str(first_normal_response.Code) + " Length-" + str(first_normal_response.BodyLength))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(first_normal_response.Code), str(first_normal_response.BodyLength)))
 		
 		avg_round_trip = (first_normal_response.RoundTrip + second_normal_response.RoundTrip + third_normal_response.RoundTrip)/3
 		
@@ -165,7 +165,7 @@ class SQLInjection(ActivePlugin):
 		elif ac_diff_level >= ab_diff_level and ac_diff_level >= bc_diff_level:
 			highest_diff_level = ac_diff_level
 		
-		Scnr.Trace("<i<br>><i<b>>Diff Levels: AB- " + str(ab_diff_level) + "% BC- " + str(bc_diff_level) + "% AC- " + str(ac_diff_level) + "%<i</b>>")
+		Scnr.Trace("<i<br>><i<b>>Diff Levels: AB- {0}% BC- {1}% AC- {2}%<i</b>>".format(str(ab_diff_level), str(bc_diff_level), str(ac_diff_level)))
 		
 		blind_int_math_score = 0
 		blind_str_conc_score = 0
@@ -193,29 +193,29 @@ class SQLInjection(ActivePlugin):
 		#return blind_math_score + blind_conc_score
 		
 	def InjectBlindIntMath(self, Req, Scnr, int_value, first_normal_response, lowest_diff_level, highest_diff_level):
-		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection with Integer Math:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection with Integer Math:<i</h>>")
 		#blind_int_math_res = []
 		
-		Scnr.RequestTrace("  Injecting " + str(int_value + 1) + "-1")
-		minus_actual_res = Scnr.Inject(str(int_value + 1) + "-1")
-		Scnr.ResponseTrace(" ==> Code-" + str(minus_actual_res.Code) + " Length-" + str(minus_actual_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}-1".format(str(int_value + 1)))
+		minus_actual_res = Scnr.Inject("{0}-1".format(str(int_value + 1)))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(minus_actual_res.Code), str(minus_actual_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, minus_actual_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response. Abandoning this check.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response. Abandoning this check.".format(str(diff_level)))
 			return 0
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response. Continuing this check.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response. Continuing this check.".format(str(diff_level)))
 		#blind_int_math.append(minus_actual_res)
 		
-		Scnr.RequestTrace("  Injecting " + str(int_value) + "+2")
-		plus_inj_res = Scnr.Inject(str(int_value) + "+2")
-		Scnr.ResponseTrace(" ==> Code-" + str(plus_inj_res.Code) + " Length-" + str(plus_inj_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}+2".format(str(int_value)))
+		plus_inj_res = Scnr.Inject("{0}+2".format(str(int_value)))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(plus_inj_res.Code), str(plus_inj_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, plus_inj_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response. Indicates SQL Injection<i</cr>>")
+			Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and so does not match with the normal response. Indicates SQL Injection<i</cr>>".format(str(diff_level)))
 			return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response. Check failed")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response. Check failed".format(str(diff_level)))
 			return 0
 		#blind_int_math.append(plus_inj_res)
 		
@@ -223,39 +223,39 @@ class SQLInjection(ActivePlugin):
 		
 	def InjectBlindStrConc(self, Req, Scnr, str_value, first_normal_response, lowest_diff_level, highest_diff_level):
 		BlindConcInjectionScore = 0
-		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection with String Concatenation:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection with String Concatenation:<i</h>>")
 		blind_str_conc_res = []
 		str_value_first_part = str_value[1:]
 		str_value_second_part = str_value[:1]
 		
-		Scnr.RequestTrace("  Injecting " + str_value_first_part + "'||'" + str_value_second_part)
-		conc_ora_res = Scnr.Inject(str_value_first_part + "'||'" + str_value_second_part)
-		Scnr.ResponseTrace(" ==> Code-" + str(conc_ora_res.Code) + " Length-" + str(conc_ora_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}'||'{1}".format(str_value_first_part, str_value_second_part))
+		conc_ora_res = Scnr.Inject("{0}'||'{1}".format(str_value_first_part, str_value_second_part))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(conc_ora_res.Code), str(conc_ora_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, conc_ora_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 			BlindConcInjectionScore = BlindConcInjectionScore + 1
 		
-		Scnr.RequestTrace("  Injecting " + str_value_first_part + "'%2b'" + str_value_second_part)
-		conc_mssql_res = Scnr.Inject(str_value_first_part + "'%2b'" + str_value_second_part)
-		Scnr.ResponseTrace(" ==> Code-" + str(conc_mssql_res.Code) + " Length-" + str(conc_mssql_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}'%2b'{1}".format(str_value_first_part, str_value_second_part))
+		conc_mssql_res = Scnr.Inject("{0}'%2b'{1}".format(str_value_first_part, str_value_second_part))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(conc_mssql_res.Code), str(conc_mssql_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, conc_mssql_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 			BlindConcInjectionScore = BlindConcInjectionScore + 1
 		
-		Scnr.RequestTrace("  Injecting " + str_value_first_part + "'%20'" + str_value_second_part)
-		conc_mysql_res = Scnr.Inject(str_value_first_part + "'%20'" + str_value_second_part)
-		Scnr.ResponseTrace(" ==> Code-" + str(conc_mysql_res.Code) + " Length-" + str(conc_mysql_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}'%20'{1}".format(str_value_first_part, str_value_second_part))
+		conc_mysql_res = Scnr.Inject("{0}'%20'{1}".format(str_value_first_part, str_value_second_part))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(conc_mysql_res.Code), str(conc_mysql_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, conc_mysql_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 			BlindConcInjectionScore = BlindConcInjectionScore + 1
 		
 		if BlindConcInjectionScore  == 1:
@@ -264,34 +264,34 @@ class SQLInjection(ActivePlugin):
 		
 		BlindConcInjectionScore = 0
 		
-		Scnr.RequestTrace("  Injecting " + str_value_first_part + '"||"' + str_value_second_part)
-		conc_ora_res = Scnr.Inject(str_value_first_part + '"||"' + str_value_second_part)
-		Scnr.ResponseTrace(" ==> Code-" + str(conc_ora_res.Code) + " Length-" + str(conc_ora_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}"||"{1}'.format(str_value_first_part, str_value_second_part))
+		conc_ora_res = Scnr.Inject('{0}"||"{1}'.format(str_value_first_part, str_value_second_part))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(conc_ora_res.Code), str(conc_ora_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, conc_ora_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 			BlindConcInjectionScore = BlindConcInjectionScore + 1
 		
-		Scnr.RequestTrace("  Injecting " + str_value_first_part + '"%2b"' + str_value_second_part)
-		conc_mssql_res = Scnr.Inject(str_value_first_part + '"%2b"' + str_value_second_part)
-		Scnr.ResponseTrace(" ==> Code-" + str(conc_mssql_res.Code) + " Length-" + str(conc_mssql_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}"%2b"{1}'.format(str_value_first_part, str_value_second_part))
+		conc_mssql_res = Scnr.Inject('{0}"%2b"{1}'.format(str_value_first_part, str_value_second_part))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(conc_mssql_res.Code), str(conc_mssql_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, conc_mssql_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 			BlindConcInjectionScore = BlindConcInjectionScore + 1
 		
-		Scnr.RequestTrace("  Injecting " + str_value_first_part + '"%20"' + str_value_second_part)
-		conc_mysql_res = Scnr.Inject(str_value_first_part + '"%20"' + str_value_second_part)
-		Scnr.ResponseTrace(" ==> Code-" + str(conc_mysql_res.Code) + " Length-" + str(conc_mysql_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}"%20"{1}'.format(str_value_first_part, str_value_second_part))
+		conc_mysql_res = Scnr.Inject('{0}"%20"{1}'.format(str_value_first_part, str_value_second_part))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(conc_mysql_res.Code), str(conc_mysql_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, conc_mysql_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 			BlindConcInjectionScore = BlindConcInjectionScore + 1
 		
 		if BlindConcInjectionScore  == 1:
@@ -303,159 +303,159 @@ class SQLInjection(ActivePlugin):
 		
 	def InjectBlindBool(self, Req, Scnr, str_value, first_normal_response, lowest_diff_level, highest_diff_level):
 		BlindBoolInjectionScore = 0
-		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection with Boolean check:\n<i</h>>")
+		Scnr.Trace("<i<br>><i<h>>Checking for Blind Injection with Boolean check:<i</h>>")
 
-		Scnr.RequestTrace("  Injecting " + str_value + "' or 1=1--")
-		f_res = Scnr.Inject(str_value + "' or 1=1--")
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}' or 1=1--".format(str_value))
+		f_res = Scnr.Inject("{0}' or 1=1--".format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + "' or 1=2--")
-			s_res = Scnr.Inject(str_value + "' or 1=2--")
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace("  Injecting {0}' or 1=2--".format(str_value))
+			s_res = Scnr.Inject("{0}' or 1=2--".format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + "' or 1=2--", "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers("{0}' or 1=2--".format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + "' or 'a'='a")
-		f_res = Scnr.Inject(str_value + "' or 'a'='a")
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}' or 'a'='a".format(str_value))
+		f_res = Scnr.Inject("{0}' or 'a'='a".format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + "' or 'a'='b")
-			s_res = Scnr.Inject(str_value + "' or 'a'='b")
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace("  Injecting {0}' or 'a'='b".format(str_value))
+			s_res = Scnr.Inject("{0}' or 'a'='b".format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + "' or 'a'='b", "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers("{0}' or 'a'='b".format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + '" or 1=1--')
-		f_res = Scnr.Inject(str_value + '" or 1=1--')
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}" or 1=1--'.format(str_value))
+		f_res = Scnr.Inject('{0}" or 1=1--'.format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + '" or 1=2--')
-			s_res = Scnr.Inject(str_value + '" or 1=2--')
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace('  Injecting {0}" or 1=2--'.format(str_value))
+			s_res = Scnr.Inject('{0}" or 1=2--'.format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + '" or 1=2--', "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers('{0}" or 1=2--'.format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + '" or "a"="a')
-		f_res = Scnr.Inject(str_value + '" or "a"="a')
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}" or "a"="a'.format(str_value))
+		f_res = Scnr.Inject('{0}" or "a"="a'.format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + '" or "a"="b')
-			s_res = Scnr.Inject(str_value + '" or "a"="b')
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace('  Injecting {0}" or "a"="b'.format(str_value))
+			s_res = Scnr.Inject('{0}" or "a"="b'.format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + '" or "a"="b', "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers('{0}" or "a"="b'.format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + "' and 1=2--")
-		f_res = Scnr.Inject(str_value + "' or 1=2--")
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}' and 1=2--".format(str_value))
+		f_res = Scnr.Inject("{0}' or 1=2--".format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + "' or 1=1--")
-			s_res = Scnr.Inject(str_value + "' or 1=1--")
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace("  Injecting {0}' or 1=1--".format(str_value))
+			s_res = Scnr.Inject("{0}' or 1=1--".format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + "' or 1=1--", "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers("{0}' or 1=1--".format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + "' or 'a'='b")
-		f_res = Scnr.Inject(str_value + "' or 'a'='b")
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}' or 'a'='b".format(str_value))
+		f_res = Scnr.Inject("{0}' or 'a'='b".format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + "' or 'a'='a")
-			s_res = Scnr.Inject(str_value + "' or 'a'='a")
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace("  Injecting {0}' or 'a'='a".format(str_value))
+			s_res = Scnr.Inject("{0}' or 'a'='a".format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + "' or 'a'='a", "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers("{0}' or 'a'='a".format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + '" or 1=2--')
-		f_res = Scnr.Inject(str_value + '" or 1=2--')
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}" or 1=2--'.format(str_value))
+		f_res = Scnr.Inject('{0}" or 1=2--'.format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + '" or 1=1--')
-			s_res = Scnr.Inject(str_value + '" or 1=1--')
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace('  Injecting {0}" or 1=1--'.format(str_value))
+			s_res = Scnr.Inject('{0}" or 1=1--'.format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + '" or 1=1--', "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers('{0}" or 1=1--'.format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
-		Scnr.RequestTrace("  Injecting " + str_value + '" or "a"="b')
-		f_res = Scnr.Inject(str_value + '" or "a"="b')
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace('  Injecting {0}" or "a"="b'.format(str_value))
+		f_res = Scnr.Inject('{0}" or "a"="b'.format(str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		diff_level = Tools.DiffLevel(first_normal_response.BodyString, f_res.BodyString)
 		if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
-			Scnr.RequestTrace("  Injecting " + str_value + '" or "a"="a')
-			s_res = Scnr.Inject(str_value + '" or "a"="a')
-			Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+			Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
+			Scnr.RequestTrace('  Injecting {0}" or "a"="a'.format(str_value))
+			s_res = Scnr.Inject('{0}" or "a"="a'.format(str_value))
+			Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 			diff_level = Tools.DiffLevel(first_normal_response.BodyString, s_res.BodyString)
 			if diff_level < lowest_diff_level or diff_level > highest_diff_level:
-				Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so does not match with the normal response.")
+				Scnr.Trace("	Diff Level with A -{0}% and so does not match with the normal response.".format(str(diff_level)))
 			else:
-				self.AddToTriggers(str_value + '" or "a"="a', "")
-				Scnr.Trace("	<i<cr>>Diff Level with A -" + str(diff_level) + "% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>")
+				self.AddToTriggers('{0}" or "a"="a'.format(str_value), "")
+				Scnr.Trace("	<i<cr>>Diff Level with A -{0}% and Matches with the normal response indicating SQL Injection<i</cr>><i<br>>".format(str(diff_level)))
 				return 6
 		else:
-			Scnr.Trace("	Diff Level with A -" + str(diff_level) + "% and so is matching with the normal response.")
+			Scnr.Trace("	Diff Level with A -{0}% and so is matching with the normal response.".format(str(diff_level)))
 		
 		return 0
 	
@@ -464,17 +464,17 @@ class SQLInjection(ActivePlugin):
 	def CanDoTimeBasedCheck(self, Req, Scnr, str_value, first_normal_response, lowest_diff_level, highest_diff_level):
 		Scnr.Trace("<i<br>><i<h>>Checking for Time Based Check Eligibility:\n<i</h>>")
 
-		Scnr.RequestTrace("  Injecting " + "'" + '"' + str_value)
-		f_res = Scnr.Inject("'" + '"' + str_value)
-		Scnr.ResponseTrace(" ==> Code-" + str(f_res.Code) + " Length-" + str(f_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}{1}{2}".format("'",'"',str_value))
+		f_res = Scnr.Inject("{0}{1}{2}".format("'", '"', str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(f_res.Code), str(f_res.BodyLength)))
 		
-		Scnr.RequestTrace("  Injecting " + "\\'" + '\\"' + str_value)
-		s_res = Scnr.Inject("\\'" + '\\"' + str_value)
-		Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}{1}{2}".format("\\'", '\\"', str_value))
+		s_res = Scnr.Inject("{0}{1}{2}".format("\\'", '\\"', str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(s_res.Code), str(s_res.BodyLength)))
 		
-		Scnr.RequestTrace("  Injecting " + "\\\\'" + '\\\\"' + str_value)
-		t_res = Scnr.Inject( "\\\\'" + '\\\\"' + str_value)
-		Scnr.ResponseTrace(" ==> Code-" + str(t_res.Code) + " Length-" + str(t_res.BodyLength))
+		Scnr.RequestTrace("  Injecting {0}{1}{2}".format("\\\\'", '\\\\"', str_value))
+		t_res = Scnr.Inject("{0}{1}{2}".format("\\\\'", '\\\\"', str_value))
+		Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(t_res.Code), str(t_res.BodyLength)))
 		
 		ft_diff_level = Tools.DiffLevel(f_res.BodyString, t_res.BodyString)
 		fs_diff_level = Tools.DiffLevel(f_res.BodyString, s_res.BodyString)
@@ -488,30 +488,29 @@ class SQLInjection(ActivePlugin):
 			else:
 				return False
 	
-	def InjectBlindTime(self, Req, Scnr, avg_round_trip):
+	def InjectBlindTime(self, Req, Scnr, str_value, avg_round_trip):
 		time = avg_round_trip * 4
 		time_str = str(time)
 		Scnr.Trace("<i<br>><i<h>>Checking for Time based Injection:<i</h>>")
-		Scnr.Trace("	Testing with delay time of " + str(time) + "ms. Average response time is " + str(avg_round_trip) + "ms")
-		for inj_str in time_check:
+		Scnr.Trace("	Testing with delay time of {0}ms. Average response time is {1}ms".format(str(time), str(avg_round_trip)))
+		for inj_str in self.time_check:
 			res = Scnr.Inject(inj_str.replace("__TIME__",time_str))
 			if res.RoundTrip > time:
-				Scnr.Trace("	Observed a time delay of " + str(res.RoundTrip) + "ms. Rechecking the result with the same Injection string...")
-				Scnr.RequestTrace("  Injecting " + inj_str.replace("__TIME__",time_str))
+				Scnr.Trace("	Observed a time delay of {0}ms. Rechecking the result with the same Injection string...".format(str(res.RoundTrip)))
+				Scnr.RequestTrace("  Injecting {0}".format(inj_str.replace("__TIME__",time_str)))
 				res = Scnr.Inject(inj_str.replace("__TIME__",time_str))
-				Scnr.ResponseTrace(" ==> Code-" + str(s_res.Code) + " Length-" + str(s_res.BodyLength))
+				Scnr.ResponseTrace(" ==> Code-{0} Length-{1}".format(str(res.Code), str(res.BodyLength)))
 				if res.RoundTrip > time:
 					self.AddToTriggers(inj_str.replace("__TIME__",time_str), "")
-					Scnr.Trace("	<i<cr>>Time delay observed again. Delay of " + str(res.RoundTrip) + "ms. Indicates SQL Injection<i</cr>>")
+					Scnr.Trace("	<i<cr>>Time delay observed again. Delay of {0}ms. Indicates SQL Injection<i</cr>>".format(str(res.RoundTrip)))
 					return 6
 				else:
-					Scnr.Trace("	Time delay did not reoccur. Got a response time of " + str(res.RoundTrip) + "ms")
+					Scnr.Trace("	Time delay did not reoccur. Got a response time of {0}ms".format(str(res.RoundTrip)))
 				Scnr.Trace("	No time delays were observed and so there is no indication of SQL Injection")
 		return 0
 	
 	def ReportSQLInjection(self, Confidence):
 		Scnr = ThreadStore.Get("Scanner")
-		TestTrace = ThreadStore.Get("TestTrace")
 		RequestTriggers = ThreadStore.Get("RequestTriggers")
 		ResponseTriggers = ThreadStore.Get("ResponseTriggers")
 		TriggerRequests = ThreadStore.Get("TriggerRequests")
@@ -519,7 +518,7 @@ class SQLInjection(ActivePlugin):
 
 		PR = PluginResult(Scnr.InjectedRequest.Host)
 		PR.Title = "SQL Injection Detected"
-		PR.Summary = "SQL Injection has been detected in the '" + Scnr.InjectedParameter + "' parameter of the " + Scnr.InjectedSection + " section of the request   <i<br>><i<br>><i<hh>>Test Trace:<i</hh>>" + Scnr.GetTrace()
+		PR.Summary = "SQL Injection has been detected in the '{0}' parameter of the {1} section of the request   <i<br>><i<br>><i<hh>>Test Trace:<i</hh>>{2}".format(Scnr.InjectedParameter, Scnr.InjectedSection, Scnr.GetTrace())
 		for i in range(len(RequestTriggers)):
 			PR.Triggers.Add(RequestTriggers[i],TriggerRequests[i],ResponseTriggers[i],TriggerResponses[i])
 		PR.ResultType = PluginResultType.Vulnerability
@@ -527,11 +526,6 @@ class SQLInjection(ActivePlugin):
 		PR.Confidence = Confidence
 		Scnr.AddResult(PR)
 		Scnr.LogTrace("SQLi Found")
-	  
-	def AddTestTrace(self, TraceMessage):
-		TestTrace = ThreadStore.Get("TestTrace")
-		TestTrace += TraceMessage
-		ThreadStore.Put("TestTrace",TestTrace)
 	
 	def AddToTriggers(self, RequestTrigger, ResponseTrigger):
 		Scnr = ThreadStore.Get("Scanner")
@@ -581,5 +575,5 @@ p = SQLInjection()
 p.SetUp()
 p.Name = "SQLi"
 p.Description = "Plugin to discover SQL Injection vulnerabilities"
-p.Version = "0.1"
+p.Version = "0.2"
 ActivePlugin.Add(p)

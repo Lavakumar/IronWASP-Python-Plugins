@@ -15,11 +15,14 @@ class CheckReflection(PassivePlugin):
 		if(Sess.Response == None):
 			return
 		
-		if(Sess.Response.IsBinary):
+		if not (Sess.Response.IsHtml or Sess.Response.IsXml or Sess.Response.IsJavaScript or Sess.Response.IsJson):
 			return
 		
 		#Get the probe strings injected by the XSS Plugin during XSS Scans
 		probe_strings = Analyzer.GetProbeStrings()
+		if len(probe_strings) == 0:
+			return
+		
 		ReqStr = Sess.Request.ToString()
 		ResStr = Sess.Response.ToString()
 		
@@ -31,19 +34,22 @@ class CheckReflection(PassivePlugin):
 					matching_probe_strings.append(ps)
 		
 		if(len(matching_probe_strings) > 0):
-			PR = PluginResult(Sess.Request.Host)
-			PR.Title = "Stored Reflection Found on {0}".format(Sess.Request.URLPath)
-			PR.Summary = "Probe Strings injected during XSS Scans were found to be reflected in this page. This indicates a Stored Reflection, test this for Stored XSS."
-			PR.Triggers.Add("", Sess.Request, "\r\n".join(matching_probe_strings), Sess.Response)
-			for mps in matching_probe_strings:
-				PR.Triggers.Add(mps, Analyzer.GetProbeStringRequest(mps))
-			PR.ResultType = PluginResultType.TestLead
-			PR.Signature = 'CheckReflection|TestLead|{0}|{1}|{2}'.format(Sess.Request.UrlPath, "-".join(matching_probe_strings))
-			Results.Add(PR)
+			Signature = '{0}|{1}'.format(Sess.Request.UrlPath, "-".join(matching_probe_strings))
+			if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.TestLead, Signature):
+				PR = PluginResult(Sess.Request.Host)
+				PR.Title = "Stored Reflection Found on {0}".format(Sess.Request.URLPath)
+				PR.Summary = "Probe Strings injected during XSS Scans were found to be reflected in this page. This indicates a Stored Reflection, test this for Stored XSS."
+				PR.Triggers.Add("", Sess.Request, "\r\n".join(matching_probe_strings), Sess.Response)
+				for mps in matching_probe_strings:
+					PR.Triggers.Add(mps, Analyzer.GetProbeStringRequest(mps))
+				PR.ResultType = PluginResultType.TestLead
+				PR.Signature = Signature
+				Results.Add(PR)
         
 
 p = CheckReflection()
 p.Name = "Check Reflections"
+p.Version = "0.1"
 p.Description = "Passive plugin to identify stored reflections"
 #p.CallingState = PluginCallingState.BeforeInterception
 p.WorksOn = PluginWorksOn.Response

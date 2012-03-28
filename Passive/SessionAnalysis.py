@@ -106,35 +106,39 @@ class SessionAnalysis(PassivePlugin):
 	def ReportSessionFixation(self, Summary, RequestTrigger, ResponseTrigger, Confidence, Severity):
 		Results = ThreadStore.Get("Results")
 		Sess = ThreadStore.Get("Session")
-		PR = PluginResult(Sess.Request.Host)
-		PR.Title = "Session Fixation Found"
-		PR.Summary = Summary
-		PR.Triggers.Add(RequestTrigger, Sess.Request, ResponseTrigger, Sess.Response)
-		PR.Signature = 'SessionAnalysis|Vulnerability|SessionFixation|{0}'.format(self.MakeUniqueString(Sess))
-		PR.Confidence = Confidence
-		PR.Severity = Severity
-		Results.Add(PR)
+		Signature = 'SessionFixation|{0}|{1}|{2}'.format(self.MakeUniqueString(Sess), RequestTrigger, ResponseTrigger)
+		if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.Vulnerability, Signature):
+			PR = PluginResult(Sess.Request.Host)
+			PR.Title = "Session Fixation Found"
+			PR.Summary = Summary
+			PR.Triggers.Add(RequestTrigger, Sess.Request, ResponseTrigger, Sess.Response)
+			PR.Signature = Signature
+			PR.Confidence = Confidence
+			PR.Severity = Severity
+			Results.Add(PR)
 		
 	def ReportPasswordInUrl(self, Summary, RequestTrigger, ResponseTrigger, Confidence, Severity):
 		Results = ThreadStore.Get("Results")
 		Sess = ThreadStore.Get("Session")
-		PR = PluginResult(Sess.Request.Host)
-		PR.Title = "Password Sent in URL"
-		PR.Summary = Summary
-		PR.Triggers.Add(RequestTrigger, Sess.Request, ResponseTrigger, Sess.Response);
-		PR.Signature = 'SessionAnalysis|Vulnerability|PasswordInUrl|{0}'.format(self.MakeUniqueString(Sess))
-		PR.Confidence = Confidence
-		PR.Severity = Severity
-		Results.Add(PR)
+		Signature = 'PasswordInUrl|{0}|{1}|{2}'.format(self.MakeUniqueString(Sess), RequestTrigger, ResponseTrigger)
+		if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.Vulnerability, Signature):
+			PR = PluginResult(Sess.Request.Host)
+			PR.Title = "Password Sent in URL"
+			PR.Summary = Summary
+			PR.Triggers.Add(RequestTrigger, Sess.Request, ResponseTrigger, Sess.Response);
+			PR.Signature = Signature
+			PR.Confidence = Confidence
+			PR.Severity = Severity
+			Results.Add(PR)
 
 	def MakeUniqueString(self, Sess):
-		us = '{0}|{1}|{2}:'.format(Sess.Request.Host, Sess.Request.SSL.ToString(), Sess.Request.Method)
+		us = '{0}|{1}:'.format(Sess.Request.SSL.ToString(), Sess.Request.Method)
 		return us
 
 p = SessionAnalysis()
 p.Name = "Session Analysis"
 p.Description = "Passive plugin to analyze the Session for potential vulnerabilities"
-p.Version = "0.1"
+p.Version = "0.2"
 p.FileName = "SessionAnalysis.py"
 p.WorksOn = PluginWorksOn.Response
 PassivePlugin.Add(p)

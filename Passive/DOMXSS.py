@@ -19,8 +19,7 @@ class DOMXSS(PassivePlugin):
 			return
 		if(Sess.Response == None):
 			return
-		if(Sess.Response.IsBinary):
-			return
+		
 		source_matches = []
 		sink_matches = []
 		
@@ -28,10 +27,15 @@ class DOMXSS(PassivePlugin):
 		
 		if(Sess.Response.IsHtml):
 			scripts = Sess.Response.Html.GetJavaScript()
+			scripts_js= []
 			for script in scripts:
-				JS += "\r\n" + script
-		elif (Tools.IsJavaScript(Sess.Response.BodyString)):
+				scripts_js.append(script)
+			JS = "\r\n".join(scripts_js)
+		elif (Sess.Response.IsJavaScript):
 			JS = Sess.Response.BodyString
+		
+		if JS == "":
+			return
 		
 		for source_match in self.sources.findall(JS):
 			for match in source_match:
@@ -48,38 +52,44 @@ class DOMXSS(PassivePlugin):
 		if((len(source_matches) == 0) and (len(sink_matches) == 0)):
 			return
 		
-		Title = ""
-		Summary = ""
-		
-		if((len(source_matches) > 0) and (len(sink_matches) > 0)):
-			Title = "DOM XSS Sources and Sinks found"
-			Summary = "DOM XSS Sources and Sinks were found in the Body of the Response. Analyze the Response for presence of DOM XSS"
-		elif(len(source_matches) > 0):
-			Title = "DOM XSS Sources found"
-			Summary = "DOM XSS Sources were found in the Body of the Response. Analyze the Response for presence of DOM XSS"
-		elif(len(sink_matches) > 0):
-			Title = "DOM XSS Sinks found"
-			Summary = "DOM XSS Sinks were found in the Body of the Response. Analyze the Response for presence of DOM XSS"
-		
-		if(len(source_matches) > 0):
-			Summary += "<i<br>><i<h>>Sources:<i</hh>><i<br>>"
-			for m in source_matches:
-				Summary += "	" + m +"<i<br>>"
-		if(len(sink_matches) > 0):
-			Summary += "<i<br>><i<h>>Sinks:<i</hh>><i<br>>"
-			for m in sink_matches:
-				Summary += "	" + m +"<i<br>>"
-				
-		PR = PluginResult(Sess.Request.Host)
-		PR.Title = Title
-		PR.Summary = Summary
-		PR.Triggers.Add("", Sess.Request, "", Sess.Response);
-		PR.ResultType = PluginResultType.TestLead;
-		PR.Signature = 'DOMXSS|TestLead|{0}'.format(Tools.MD5(JS))
-		Results.Add(PR)
+		Signature = '{0}|{1}|{2}|{3}'.format(Sess.Request.UrlPath, Sess.Request.Method, ":".join(source_matches), ":".join(sink_matches))
+		if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.TestLead, Signature):
+			Title = ""
+			Summary = ""			
+			if((len(source_matches) > 0) and (len(sink_matches) > 0)):
+				Title = "DOM XSS Sources and Sinks found"
+				Summary = "DOM XSS Sources and Sinks were found in the Body of the Response. Analyze the Response for presence of DOM XSS"
+			elif(len(source_matches) > 0):
+				Title = "DOM XSS Sources found"
+				Summary = "DOM XSS Sources were found in the Body of the Response. Analyze the Response for presence of DOM XSS"
+			elif(len(sink_matches) > 0):
+				Title = "DOM XSS Sinks found"
+				Summary = "DOM XSS Sinks were found in the Body of the Response. Analyze the Response for presence of DOM XSS"
+			
+			if(len(source_matches) > 0):
+				trace_title = "<i<br>><i<h>>Sources:<i</hh>><i<br>>"
+				source_trace = []
+				for m in source_matches:
+					source_trace.append("	{0}<i<br>>".format(m))
+				Summary = "{0}{1}{2}".format(Summary, trace_title, "".join(source_trace))
+			if(len(sink_matches) > 0):
+				trace_title = "<i<br>><i<h>>Sinks:<i</hh>><i<br>>"
+				sink_trace = []
+				for m in sink_matches:
+					sink_trace.append("	{0}<i<br>>".format(m))
+				Summary = "{0}{1}{2}".format(Summary, trace_title, "".join(sink_trace))
+			
+			PR = PluginResult(Sess.Request.Host)
+			PR.Title = Title
+			PR.Summary = Summary
+			PR.Triggers.Add("", Sess.Request, "", Sess.Response);
+			PR.ResultType = PluginResultType.TestLead;
+			PR.Signature = Signature
+			Results.Add(PR)
 			
 p = DOMXSS()
 p.Name = "DOMXSSChecker"
+p.Version = "0.1"
 p.Description = "Passive plugin that checks the JavaScript in HTTP Response for DOM XSS Sources and Sinks."
 #When should this plugin be called. Possible values - BeforeInterception, AfterInterception, Both, Offline. Offline is the default value, it is also the recommended value if you are not going to perform any changes in the Request/Response
 #p.CallingState = PluginCallingState.BeforeInterception
