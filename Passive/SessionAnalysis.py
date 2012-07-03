@@ -6,6 +6,16 @@ import re
 
 class SessionAnalysis(PassivePlugin):
     
+	#Override the GetInstance method of the base class to return a new instance with details
+	def GetInstance(self):
+		p = SessionAnalysis()
+		p.Name = "Session Analysis"
+		p.Description = "Passive plugin to analyze the Session for potential vulnerabilities"
+		p.Version = "0.3"
+		p.FileName = "SessionAnalysis.py"
+		p.WorksOn = PluginWorksOn.Response
+		return p
+	
 	def Check(self, Sess, Results):
 
 		ThreadStore.Put("Session", Sess)
@@ -136,9 +146,4 @@ class SessionAnalysis(PassivePlugin):
 		return us
 
 p = SessionAnalysis()
-p.Name = "Session Analysis"
-p.Description = "Passive plugin to analyze the Session for potential vulnerabilities"
-p.Version = "0.2"
-p.FileName = "SessionAnalysis.py"
-p.WorksOn = PluginWorksOn.Response
-PassivePlugin.Add(p)
+PassivePlugin.Add(p.GetInstance())

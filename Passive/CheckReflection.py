@@ -7,6 +7,16 @@ import re
 
 class CheckReflection(PassivePlugin):
     
+	#Override the GetInstance method of the base class to return a new instance with details
+	def GetInstance(self):
+		p = CheckReflection()
+		p.Name = "Check Reflections"
+		p.Version = "0.2"
+		p.Description = "Passive plugin to identify stored reflections"
+		#p.CallingState = PluginCallingState.BeforeInterception
+		p.WorksOn = PluginWorksOn.Response
+		return p
+	
 	def Check(self, Sess, Results):
 	
 		if(Sess.Request == None):
@@ -48,9 +58,4 @@ class CheckReflection(PassivePlugin):
         
 
 p = CheckReflection()
-p.Name = "Check Reflections"
-p.Version = "0.1"
-p.Description = "Passive plugin to identify stored reflections"
-#p.CallingState = PluginCallingState.BeforeInterception
-p.WorksOn = PluginWorksOn.Response
-PassivePlugin.Add(p)
+PassivePlugin.Add(p.GetInstance())

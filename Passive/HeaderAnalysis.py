@@ -8,6 +8,18 @@ import clr
 #Inherit from the base PassivePlugin class
 class HeaderAnalysis(PassivePlugin):
 
+	#Override the GetInstance method of the base class to return a new instance with details
+	def GetInstance(self):
+		p = HeaderAnalysis()
+		p.Name = "Header Analysis"
+		p.Version = "0.2"
+		p.Description = "Analyzes the HTTP Request and Response Headers for potential security issues"
+		#When should this plugin be called. Possible values - BeforeInterception, AfterInterception, Both, Offline. Offline is the default value, it is also the recommended value if you are not going to perform any changes in the Request/Response
+		#p.CallingState = PluginCallingState.BeforeInterception
+		#On what should this plugin run. Possible values - Request, Response, Both
+		p.WorksOn = PluginWorksOn.Response
+		return p
+	
 	#Override the Check method of the base class with custom functionlity
 	def Check(self, Sess, Results):
 				
@@ -49,11 +61,4 @@ class HeaderAnalysis(PassivePlugin):
 		
 	
 p = HeaderAnalysis()
-p.Name = "Header Analysis"
-p.Version = "0.1"
-p.Description = "Analyzes the HTTP Request and Response Headers for potential security issues"
-#When should this plugin be called. Possible values - BeforeInterception, AfterInterception, Both, Offline. Offline is the default value, it is also the recommended value if you are not going to perform any changes in the Request/Response
-#p.CallingState = PluginCallingState.BeforeInterception
-#On what should this plugin run. Possible values - Request, Response, Both
-p.WorksOn = PluginWorksOn.Response
-PassivePlugin.Add(p)
+PassivePlugin.Add(p.GetInstance())

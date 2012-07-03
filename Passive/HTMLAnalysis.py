@@ -5,6 +5,16 @@ from IronWASP import *
 
 class HTMLAnalysis(PassivePlugin):
     
+	#Override the GetInstance method of the base class to return a new instance with details
+	def GetInstance(self):
+		p = HTMLAnalysis()
+		p.Name = "HTML Analysis"
+		p.Version = "0.2"
+		p.Description = "Passive plugin to analyze the Response HTML for potential vulnerabilities"
+		p.FileName = "HTMLAnalysis.py"
+		p.WorksOn = PluginWorksOn.Response
+		return p
+	
 	def Check(self, Sess, Results):
 		
 		if(Sess.Response.IsBinary):
@@ -240,9 +250,4 @@ class HTMLAnalysis(PassivePlugin):
 
 
 p = HTMLAnalysis()
-p.Name = "HTML Analysis"
-p.Version = "0.1"
-p.Description = "Passive plugin to analyze the Response HTML for potential vulnerabilities"
-p.FileName = "HTMLAnalysis.py"
-p.WorksOn = PluginWorksOn.Response
-PassivePlugin.Add(p)
+PassivePlugin.Add(p.GetInstance())

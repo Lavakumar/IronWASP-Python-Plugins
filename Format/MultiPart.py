@@ -138,7 +138,7 @@ class MultiPart(FormatPlugin):
 			binary_data = Array.CreateInstance(Byte, len(ba) - (len(parts[0]) + 4 ))#don't use len(parts[1]) as binary values would have incorrect length in the string form
 			Array.Copy(ba, len(parts[0]) + 4, binary_data,0, len(binary_data))
 			#xml = xml + Tools.Base64Encode(binary_data)
-			XW.WriteValue(Tools.Base64Encode(binary_data))
+			XW.WriteValue(Tools.Base64EncodeByteArray(binary_data))
 		else:
 			#xml = xml + parts[1]
 			XW.WriteValue(parts[1])

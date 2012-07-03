@@ -12,9 +12,21 @@ class DOMXSS(PassivePlugin):
 	#From http://code.google.com/p/domxsswiki/wiki/FindingDOMXSS by Mario Heiderich
 	sources = re.compile('/(location\s*[\[.])|([.\[]\s*["\']?\s*(arguments|dialogArguments|innerHTML|write(ln)?|open(Dialog)?|showModalDialog|cookie|URL|documentURI|baseURI|referrer|name|opener|parent|top|content|self|frames)\W)|(localStorage|sessionStorage|Database)/')
 	sinks = re.compile('/((src|href|data|location|code|value|action)\s*["\'\]]*\s*\+?\s*=)|((replace|assign|navigate|getResponseHeader|open(Dialog)?|showModalDialog|eval|evaluate|execCommand|execScript|setTimeout|setInterval)\s*["\'\]]*\s*\()/')
-		
+	
+	#Override the GetInstance method of the base class to return a new instance with details
+	def GetInstance(self):
+		p = DOMXSS()
+		p.Name = "DOMXSSChecker"
+		p.Version = "0.2"
+		p.Description = "Passive plugin that checks the JavaScript in HTTP Response for DOM XSS Sources and Sinks."
+		#When should this plugin be called. Possible values - BeforeInterception, AfterInterception, Both, Offline. Offline is the default value, it is also the recommended value if you are not going to perform any changes in the Request/Response
+		#p.CallingState = PluginCallingState.BeforeInterception
+		#On what should this plugin run. Possible values - Request, Response, Both
+		p.WorksOn = PluginWorksOn.Response
+		return p
+	
 	#Override the Check method of the base class with custom functionlity
-	def Check(self, Sess, Results):		
+	def Check(self, Sess, Results):	
 		if(Sess.Request == None):
 			return
 		if(Sess.Response == None):
@@ -88,11 +100,4 @@ class DOMXSS(PassivePlugin):
 			Results.Add(PR)
 			
 p = DOMXSS()
-p.Name = "DOMXSSChecker"
-p.Version = "0.1"
-p.Description = "Passive plugin that checks the JavaScript in HTTP Response for DOM XSS Sources and Sinks."
-#When should this plugin be called. Possible values - BeforeInterception, AfterInterception, Both, Offline. Offline is the default value, it is also the recommended value if you are not going to perform any changes in the Request/Response
-#p.CallingState = PluginCallingState.BeforeInterception
-#On what should this plugin run. Possible values - Request, Response, Both
-p.WorksOn = PluginWorksOn.Response
-PassivePlugin.Add(p)
+PassivePlugin.Add(p.GetInstance())
