@@ -210,5 +210,6 @@ class MultiPart(FormatPlugin):
 
 p = MultiPart()
 p.Name = "MultiPart"
+p.Version = "0.2"
 p.Description = "Format Plugin to convert MultiPart body to XML and vice versa"
 FormatPlugin.Add(p)

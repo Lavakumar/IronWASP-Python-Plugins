@@ -9,7 +9,7 @@ import re
 #Inherit from the base ActivePlugin class
 class LocalFileInclude(ActivePlugin):
 
-	null_terminator = ["\0",""]
+	null_terminator = ["\000",""]
 	files = ["etc/passwd", "boot.ini"]
 	file_ext = ["txt", "html", "jpg",""]
 	
@@ -17,7 +17,7 @@ class LocalFileInclude(ActivePlugin):
 		p = LocalFileInclude()
 		p.Name = "Local File Include"
 		p.Description = "Active Plugin to check for Local File Include/Directory Traversal vulnerabilities"
-		p.Version = "0.1"
+		p.Version = "0.2"
 		return p
 	
 	#Override the Check method of the base class with custom functionlity
@@ -42,7 +42,7 @@ class LocalFileInclude(ActivePlugin):
 		file_exts = []
 		self.base_res = self.scnr.BaseResponse
 		parts = self.scnr.PreInjectionParameterValue.split(".")
-		if len(parts) > 0:
+		if len(parts) > 1:
 			file_exts.append(parts[len(parts) - 1])
 		file_exts.extend(self.file_ext)
 		self.scnr.Trace("<i<br>><i<h>>Checking for Local File Include:<i</h>>")
@@ -54,7 +54,7 @@ class LocalFileInclude(ActivePlugin):
 					payload = "{0}{1}{2}".format("../" * 15, file, nt)
 					if len(fe) > 0:
 						payload = "{0}.{1}".format(payload, fe)
-					self.scnr.RequestTrace("  Injected payload - {0}".format(payload.replace("\0","\\0")))
+					self.scnr.RequestTrace("  Injected payload - {0}".format(payload.replace("\000","\\000")))
 					res = self.scnr.Inject(payload)
 					downloaded_file_info = self.GetDownloadedFileInfo(res, file)
 					if len(downloaded_file_info) > 0:

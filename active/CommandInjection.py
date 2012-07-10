@@ -18,7 +18,7 @@ class CommandInjection(ActivePlugin):
 		p = CommandInjection()
 		p.Name = "Command Injection"
 		p.Description = "Active Plugin to check for OS Command Injection vulnerabilities"
-		p.Version = "0.1"
+		p.Version = "0.2"
 		return p
 	
 	#Override the Check method of the base class with custom functionlity
@@ -122,8 +122,7 @@ class CommandInjection(ActivePlugin):
 		for i in range(2):
 			self.scnr.RequestTrace("  Injected payload - {0}".format(payload))
 			res = self.scnr.Inject(payload)
-			#we reduce the delay by 3 seconds to make up for the the fact that the ping could complete earlier
-			if res.RoundTrip >= (self.time - self.buffer) * 1000:
+			if res.RoundTrip >= (self.time * 1000):
 				if i == 0:
 					self.scnr.ResponseTrace("	==> <i<b>>Observed a delay of {0}ms, induced delay was for {1}ms. Rechecking the delay by sending the same payload again<i</b>>".format(res.RoundTrip, (self.time + self.buffer) * 1000))
 				else:

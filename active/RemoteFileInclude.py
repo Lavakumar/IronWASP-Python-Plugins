@@ -16,7 +16,7 @@ class RemoteFileInclude(ActivePlugin):
 		p = RemoteFileInclude()
 		p.Name = "Remote File Include"
 		p.Description = "Active Plugin to check for Remote File Include vulnerabilities"
-		p.Version = "0.1"
+		p.Version = "0.2"
 		return p
 	
 	#Override the Check method of the base class with custom functionlity
@@ -54,11 +54,15 @@ class RemoteFileInclude(ActivePlugin):
 	
 	def CheckForTimeBasedRemoteFileInclude(self):
 		self.scnr.Trace("<i<br>><i<h>>Checking for Remote File Include with Time Delay:<i</h>>")
+		self.IsResponseTimeConsistent = True
 		for p in self.prefixes:
 			for s in self.suffixes:
 				sd = self.GetUniqueSubdomain()
 				payload = "{0}<sub_domain>.example.org{1}".format(p, s)
-				self.CheckForRemoteFileIncludeWithSubDomainDelay(payload)
+				if self.IsResponseTimeConsistent:
+					self.CheckForRemoteFileIncludeWithSubDomainDelay(payload)
+				else:
+					break
 	
 	def CheckForRemoteFileIncludeWithSubDomainDelay(self, payload_raw):
 		worked = 0
@@ -68,7 +72,8 @@ class RemoteFileInclude(ActivePlugin):
 				return
 			payload = payload_raw.replace("<sub_domain>", str(self.GetUniqueSubdomain()))
 			first_time = 0
-			for i in range(4):
+			last_res_time = 0
+			for i in range(7):
 				if i == 0:
 					self.scnr.Trace("<i<br>><i<b>>Sending First Request with Payload - {0}:<i</b>>".format(payload))
 				self.scnr.RequestTrace("  Injected payload - {0}".format(payload))
@@ -79,12 +84,19 @@ class RemoteFileInclude(ActivePlugin):
 					first_time = res.RoundTrip
 					self.scnr.ResponseTrace("	==> Response time is {0}ms. This will be treated as the base time.".format(res.RoundTrip))
 				else:
+					if i == 2:
+						last_res_time = res.RoundTrip
+					else:
+						if res.RoundTrip > (last_res_time + 150) or res.RoundTrip < (last_res_time - 150):
+							self.IsResponseTimeConsistent = False
+							self.scnr.Trace("<i<br>><i<b>>Response times are inconsistent, terminating time based RFI check.<i</b>>")
+							return
 					if res.RoundTrip >= first_time - 300:
 						self.scnr.ResponseTrace("	==> Response time is {0}ms which is not less than base time - 300ms. Not an indication of RFI".format(res.RoundTrip))
 						break
 					else:
 						self.scnr.ResponseTrace("	==> Response time is {0}ms which is less than base time - 300ms. If this is repeated then it could mean RFI".format(res.RoundTrip))
-				if i == 3:
+				if i == 6:
 					worked = worked + 1
 					self.scnr.SetTraceTitle("RFI Time Delay Observed Once", 5)
 					if worked == 2:
