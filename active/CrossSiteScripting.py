@@ -10,7 +10,7 @@ class CrossSiteScripting(ActivePlugin):
 	def GetInstance(self):
 		p = CrossSiteScripting()
 		p.Name = "Cross-site Scripting"
-		p.Version = "0.2"
+		p.Version = "0.3"
 		p.Description = "Active Plugin to detect Cross-site Scripting vulnerabilities"
 		return p
 	
@@ -527,8 +527,8 @@ class CrossSiteScripting(ActivePlugin):
 		return False
 	
 	def IsInSpecialAttribute(self, keyword, res):
-		special_tags = [ "iframe", "script", "link", "object", "embed", "form", "button", "base", "a"]
-		special_attributes = [ "src", "src", "href", "data", "src", "action", "formaction", "href", "href"]
+		special_tags = [ "iframe", "frame", "script", "link", "object", "embed", "form", "button", "base", "a"]
+		special_attributes = [ "src", "src", "src", "href", "data", "src", "action", "formaction", "href", "href"]
 		
 		self.injectable_special_tags = []
 		self.injectable_special_attributes = []
