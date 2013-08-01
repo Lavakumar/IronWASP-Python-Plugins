@@ -9,7 +9,7 @@ class CrossSiteScripting(ActivePlugin):
   def GetInstance(self):
     p = CrossSiteScripting()
     p.Name = "Cross-site Scripting"
-    p.Version = "0.5"
+    p.Version = "0.6"
     p.Description = "Active Plugin to detect Cross-site Scripting vulnerabilities"
     return p
   
@@ -20,6 +20,8 @@ class CrossSiteScripting(ActivePlugin):
     self.Confidence = 0
     self.RequestTriggers = []
     self.ResponseTriggers = []
+    self.RequestTriggerDescs = []
+    self.ResponseTriggerDescs = []
     self.TriggerRequests = []
     self.TriggerResponses = []
     #Send a Random string for analysing injection nature
@@ -35,7 +37,7 @@ class CrossSiteScripting(ActivePlugin):
     #Store the ProbeString in Analyzer for Stored XSS Reflection Checking
     Analyzer.AddProbeString(self.ps, self.Scnr.InjectedRequest)
     
-    res_details = "		|| Code - {0} | Length - {1}".format(self.ps_res.Code, self.ps_res.BodyLength)
+    res_details = "    || Code - {0} | Length - {1}".format(self.ps_res.Code, self.ps_res.BodyLength)
     if(self.ps_res.BodyString.Contains(self.ps)):
       self.ps_contexts = self.GetContext(self.ps, self.ps_res)
       self.ps_contexts = list(set(self.ps_contexts))#make the array unique
@@ -58,7 +60,7 @@ class CrossSiteScripting(ActivePlugin):
         self.CheckForInjectionInFullJS()
       elif(context == "InLineJS" or context == "JSUrl" or context == "EventAttribute"):
         self.CheckForInjectionInJSInsideHTML()
-      elif(context == "InLineVB"):
+      elif(context == "InLineVB" or context == "VBUrl"):
         self.CheckForInjectionInVBInsideHTML()
       elif(context == "UrlAttribute"):
         self.CheckForInjectionInUrlAttribute()
@@ -84,7 +86,7 @@ class CrossSiteScripting(ActivePlugin):
   
   def CheckForInjectionInHtml(self):
     contexts = ["HTML"]
-    if self.ps_contexts.Contains("Unknown") or self.ps_contexts.Contains("AttributeName") or self.ps_contexts.Contains("AttributeValueWithSingleQuote") or self.ps_contexts.Contains("AttributeValueWithDoubleQuote"):
+    if (len(self.ps_contexts) == 0) or self.ps_contexts.Contains("Unknown") or self.ps_contexts.Contains("AttributeName") or self.ps_contexts.Contains("AttributeValueWithSingleQuote") or self.ps_contexts.Contains("AttributeValueWithDoubleQuote"):
       contexts.append("HTML Escape")
     if self.ps_contexts.Contains("Textarea"):
       contexts.append("TEXTAREA tag")
@@ -160,10 +162,10 @@ class CrossSiteScripting(ActivePlugin):
         self.Scnr.RequestTrace("  Injected {0} - ".format(payload))
         res = self.Scnr.Inject(payload)
         
-        res_details = "		|| Code - {0} | Length - {1}".format(res.Code, res.BodyLength)
+        res_details = "    || Code - {0} | Length - {1}".format(res.Code, res.BodyLength)
         self.CheckResponseDetails(res)
         if len(res.Html.Get("h", attr_name, attr_value)) > 0:
-          self.AddToTriggers(payload, payload)
+          self.AddToTriggers(payload, "The payload in this request tries to inject an HTML tag named 'h' with attribute name '{0}' and attribute value '{1}'. The payload is {2}".format(attr_name, attr_value, payload), payload, "This response contains an HTML tag named 'h' with attribute name '{0}' and attribute value '{1}'. This was inserted by the payload.".format(attr_name, attr_value))
           self.SetConfidence(3)
           self.Scnr.ResponseTrace("<i<cr>>{0}<i</cr>>{1}".format(trace_success, res_details))
         else:
@@ -192,7 +194,7 @@ class CrossSiteScripting(ActivePlugin):
     script_contexts = list(set(script_contexts))#make the array unique
     
     if script_contexts.count("NormalString") > 0:
-      self.AddToTriggersWithProbeStringInjection(self.ps, self.ps)
+      self.AddToTriggersWithProbeStringInjection(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", self.ps, "The random string from the payload is found in the JavaScript code section of this response.")
       self.SetConfidence(1)
       self.Scnr.Trace("<i<cr>>Probe string is reflected inside JavaScript Script outside Quotes. Possibly vulnerable!<i</cr>>")
     
@@ -214,7 +216,7 @@ class CrossSiteScripting(ActivePlugin):
           res = self.Scnr.Inject(payload)
           if self.IsExpressionStatement(res, keyword):
             self.Scnr.ResponseTrace("<i<cr>>Injected {0} as a JavaScript statement.<i</cr>>".format(keyword))
-            self.AddToTriggers(payload, keyword)
+            self.AddToTriggers(payload, "The payload in this request tries to insert the string '{0}' as a JavaScript statement. The payload is {1}".format(keyword, payload), keyword, "The string '{0}' is found as an statement in the JavaScript code section of this response. This was inserted by the payload.".format(keyword))
             self.SetConfidence(3)
             payload_inj_success = True
             js_inj_success = True
@@ -239,7 +241,7 @@ class CrossSiteScripting(ActivePlugin):
         res = self.Scnr.Inject(payload)
         if self.IsNormalString(res, keyword):
           self.Scnr.ResponseTrace("<i<cr>>Injected {0} as a JavaScript statement.<i</cr>>".format(keyword))
-          self.AddToTriggers(payload, keyword)
+          self.AddToTriggers(payload, "The payload in this request tries to insert the string '{0}' as a JavaScript statement. The payload is {1}".format(keyword, payload), keyword, "The string '{0}' is found as an statement in the JavaScript code section of this response. This was inserted by the payload.".format(keyword))
           self.SetConfidence(2)
           js_inj_success = True
           break
@@ -280,7 +282,7 @@ class CrossSiteScripting(ActivePlugin):
         js_triggers = []
         for line in ij.SourceToSinkLines:
           js_triggers.append(line)
-        self.AddToTriggersWithProbeStringInjection(self.ps, "\r\n".join(js_triggers))
+        self.AddToTriggersWithProbeStringInjection(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", "\r\n".join(js_triggers), "The random string from the payload has been found in DOM XSS sinks inside the JavaScript of this response.")
         self.SetConfidence(3)
     except:
       pass
@@ -336,7 +338,7 @@ class CrossSiteScripting(ActivePlugin):
     
     script_contexts = list(set(script_contexts))#make the array unique
     if script_contexts.count("NormalString") > 0:
-      self.AddToTriggersWithProbeStringInjection(self.ps, self.ps)
+      self.AddToTriggersWithProbeStringInjection(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", self.ps, "The random string from the payload has been found in the VB Script code section of this response.")
       self.SetConfidence(1)
       self.Scnr.Trace("<i<cr>>Probe string is reflected inside VB Script outside Quotes. Possibly vulnerable!<i</cr>>")
     
@@ -356,7 +358,7 @@ class CrossSiteScripting(ActivePlugin):
       res = self.Scnr.Inject(payload)
       if self.IsNormalVBString(res, keyword):
         self.Scnr.ResponseTrace("<i<cr>>Injected {0} as a VB statement.<i</cr>>".format(keyword))
-        self.AddToTriggers(payload, keyword)
+        self.AddToTriggers(payload, "The payload in this request tries to insert the string '{0}' as a VB Script statement. The payload is {1}".format(keyword, payload), keyword, "The string '{0}' is found as an statement in the VB Script code section of this response. This was inserted by the payload.".format(keyword))
         self.SetConfidence(2)
         vb_inj_success = True
         break
@@ -387,25 +389,30 @@ class CrossSiteScripting(ActivePlugin):
   
   def CheckForInjectionInUrlAttribute(self):
     #Start the test
+    keyword = "yhstdjbz"
+    payload = "javascript:{0}".format(keyword)
+
     self.Scnr.Trace("<i<br>><i<h>>Checking JS Injection in UrlAttribute Context:<i</h>>")
-    self.Scnr.RequestTrace("  Injected javascript:yhstdjbz - ")
+    self.Scnr.RequestTrace("  Injected {0} - ".format(payload))
+        
+    ua_res = self.Scnr.Inject(payload)
     
-    ua_res = self.Scnr.Inject("javascript:yhstdjbz")
-    
-    res_details = "		|| Code - {0} | Length - {1}".format(str(ua_res.Code), str(ua_res.BodyLength))
+    res_details = "    || Code - {0} | Length - {1}".format(str(ua_res.Code), str(ua_res.BodyLength))
     self.CheckResponseDetails(ua_res)
     
-    if ua_res.BodyString.Contains("javascript:yhstdjbz") or (ua_res.Headers.Has("Refresh") and ua_res.Headers.Get("Refresh").count("javascript:yhstdjbz") > 0):
-      ua_inj_contexts = self.GetContext("yhstdjbz", ua_res)
+    if ua_res.BodyString.Contains(payload) or (ua_res.Headers.Has("Refresh") and ua_res.Headers.Get("Refresh").count(payload) > 0):
+      ua_inj_contexts = self.GetContext(keyword, ua_res)
       if ua_inj_contexts.Contains("JSUrl"):
-        self.Scnr.ResponseTrace("<i<cr>>Got yhstdjbz in InLineJS context<i</cr>>{0}".format(res_details))
-        self.AddToTriggers("javascript:yhstdjbz","javascript:yhstdjbz")
+        self.Scnr.ResponseTrace("<i<cr>>Got {0} in InLineJS context<i</cr>>{1}".format(keyword, res_details))
+        self.AddToTriggers(payload, "The payload in this request attempts to inject the string '{0}' as executable code using the javascript: url format. The payload is {1}".format(keyword, payload), payload, "The string '{0}' from the payload is found as a JavaScript url in this response.".format(keyword))
         self.SetConfidence(3)
       else:
-        self.Scnr.ResponseTrace("Got javascript:yhstdjbz in non-UrlAttribute context")
+        self.Scnr.ResponseTrace("Got {0} in non-UrlAttribute context".format(payload))
     else:
       #must check for the encoding here
       self.Scnr.ResponseTrace("No reflection{0}".format(res_details))
+      
+  
   def CheckForInjectionInAttributeName(self):		
     #Start the test
     self.Scnr.Trace("<i<br>><i<h>>Checking for Injection in HTML AttributeName Context:<i</h>>")
@@ -459,29 +466,29 @@ class CrossSiteScripting(ActivePlugin):
         if self.IsInSpecialAttribute(payload, res):
           all_tags_and_attrs = []
           for i in range(len(self.injectable_special_tags)):
-            all_tags_and_attrs.append("	{0}) <i<b>>{1}<i</b>> attribute of <i<b>>{2}<i</b>> tag".format(i + 1, self.injectable_special_tags[i], self.injectable_special_attributes[i]))
+            all_tags_and_attrs.append("  {0}) <i<b>>{1}<i</b>> attribute of <i<b>>{2}<i</b>> tag".format(i + 1, self.injectable_special_tags[i], self.injectable_special_attributes[i]))
           self.Scnr.ResponseTrace("<i<cr>>Got {0} inside the following Special HTML Attributes:<i</cr>><i<br>>{1}".format(payload, "<i<br>>".join(all_tags_and_attrs)))
           if self.injectable_special_tags.count("script") > 0:
-            self.AddToTriggers(payload, payload)
+            self.AddToTriggers(payload, "The payload in this request is an absolute url pointing to an external domain. The payload is {0}".format(payload), payload, "The absolute url from the payload is found in the src attribute of SCRIPT tag in this response.")
             self.SetConfidence(3)
             self.Scnr.Trace("<i<br>><i<cr>>Able to set the source attribute of the Script tag to remote URL and include rogue JavaScript<i</cr>>")
           elif self.injectable_special_tags.count("object") > 0:
-            self.AddToTriggers(payload, payload)
+            self.AddToTriggers(payload, "The payload in this request is an absolute url pointing to an external domain. The payload is {0}".format(payload), payload, "The absolute url from the payload is found in the data attribute of OBJECT tag in this response.")
             self.SetConfidence(3)
             self.Scnr.Trace("<i<br>><i<cr>>Able to set the data attribute of the Object tag to remote URL and include rogue active components like SWF files<i</cr>>")
           elif self.injectable_special_tags.count("embed") > 0:
-            self.AddToTriggers(payload, payload)
+            self.AddToTriggers(payload, "The payload in this request is an absolute url pointing to an external domain. The payload is {0}".format(payload), payload, "The absolute url from the payload is found in the href attribute of EMBED tag in this response.")
             self.SetConfidence(3)
             self.Scnr.Trace("<i<br>><i<cr>>Able to set the href attribute of the Embed tag to remote URL and include rogue active components like SWF files<i</cr>>")
           elif self.injectable_special_tags.count("link") > 0:
-            self.AddToTriggers(payload, payload)
+            self.AddToTriggers(payload, "The payload in this request is an absolute url pointing to an external domain. The payload is {0}".format(payload), payload, "The absolute url from the payload is found in the href attribute of LINK tag in this response.")
             self.SetConfidence(3)
             self.Scnr.Trace("<i<br>><i<cr>>Able to set the href attribute of the Link tag to remote URL and include rogue CSS that can contain JavaScript<i</cr>>")
           else:
             self.ReportInjectionInSpecialAttributes(payload)
           return
         else:
-          res_details = "		|| Code - {0} | Length - {1}".format(res.Code, res.BodyLength)
+          res_details = "    || Code - {0} | Length - {1}".format(res.Code, res.BodyLength)
           self.Scnr.ResponseTrace("Did not get payload inside the Special HTML Attributes{0}".format(res_details))
         
   def CheckForSameSiteScriptIncludeSetting(self):
@@ -557,14 +564,14 @@ class CrossSiteScripting(ActivePlugin):
     self.Scnr.RequestTrace("  Injected {0} - ".format(Payload))
     
     at_res = self.Scnr.Inject(Payload)
-    res_details = "		|| Code - {0} | Length - {1}".format(str(at_res.Code), str(at_res.BodyLength))
+    res_details = "    || Code - {0} | Length - {1}".format(str(at_res.Code), str(at_res.BodyLength))
     self.CheckResponseDetails(at_res)
     
     name_contexts = self.GetContext(AttrName, at_res)
     value_contexts = self.GetContext(AttrValue, at_res)
     if(name_contexts.Contains("AttributeName") and (value_contexts.Contains("AttributeValueWithSingleQuote") or value_contexts.Contains("AttributeValueWithDoubleQuote"))):
       self.Scnr.ResponseTrace("<i<cr>>Got {0} as AttributeName and {1} as AttributeValue<i</cr>>{2}".format(AttrName, AttrValue, res_details))
-      self.AddToTriggers(Payload, Payload)
+      self.AddToTriggers(Payload, "The payload in this request tries to inject an attribute with name '{0}' and value '{1}' inside an HTML tag. The payload is {2}".format(AttrName, AttrValue, Payload), Payload, "This response contains an attribute with name '{0}' and value '{1}' inside an HTML tag. This was inserted by the payload.".format(AttrName, AttrValue))
       self.SetConfidence(3)
     elif(at_res.BodyString.Contains(Payload)):
        self.Scnr.ResponseTrace("Got {0} outside of AttributeName and AttributeValue context{1}".format(Payload, res_details))
@@ -754,7 +761,7 @@ class CrossSiteScripting(ActivePlugin):
     res = self.Scnr.Inject(payload)
     if self.IsReqCssContext(res, keyword, url_or_js):
       self.Scnr.ResponseTrace("<i<cr>>XSS inside CSS successful!<i</cr>>")
-      self.AddToTriggers(payload, keyword)
+      self.AddToTriggers(payload, "The payload in this request tries to insert the string '{0}' as executable JavaScript code inside CSS. The payload is {1}".format(keyword, payload), keyword, "The string '{0}' from the payload is found inside the CSS section of this response and it's exact position inside the CSS can lead to it being executed as JavaScript.".format(keyword))
       self.SetConfidence(3)
     else:
       self.Scnr.ResponseTrace("Not in interesting CSS context")
@@ -870,7 +877,7 @@ class CrossSiteScripting(ActivePlugin):
     PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
     PR.Title = "XSS Plugin found reflection in CSS"
     PR.Summary = "Data injected in to the '{0}' parameter of the {1} is being reflected back as part of CSS. Manually check this for XSS.".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection)
-    PR.Triggers.Add("", self.Scnr.InjectedRequest, "", self.Scnr.InjectionResponse)
+    PR.Triggers.Add(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", self.ps_req, self.ps, "The injected payload is found inside the CSS section of this response.", self.ps_res)
     PR.Type = FindingType.TestLead
     self.Scnr.AddFinding(PR)
   
@@ -878,19 +885,23 @@ class CrossSiteScripting(ActivePlugin):
     PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
     PR.Title = "XSS Plugin found reflection in JavaScript"
     PR.Summary = "Data injected in to the '{0}' parameter of the {1} is being reflected back inside JavaScript. Manually check this for XSS.".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection)
-    PR.Triggers.Add("", self.Scnr.InjectedRequest, "", self.Scnr.InjectionResponse)
+    PR.Triggers.Add(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", self.ps_req, self.ps, "The injected payload is found inside the JavaScript code section of this response.", self.ps_res)
     PR.Type = FindingType.TestLead
     self.Scnr.AddFinding(PR)
     
-  def AddToTriggers(self, RequestTrigger, ResponseTrigger):
+  def AddToTriggers(self, RequestTrigger, RequestTriggerDesc, ResponseTrigger, ResponseTriggerDesc):
     self.RequestTriggers.append(RequestTrigger)
     self.ResponseTriggers.append(ResponseTrigger)
+    self.RequestTriggerDescs.append(RequestTriggerDesc)
+    self.ResponseTriggerDescs.append(ResponseTriggerDesc)
     self.TriggerRequests.append(self.Scnr.InjectedRequest.GetClone())
     self.TriggerResponses.append(self.Scnr.InjectionResponse.GetClone())
     
-  def AddToTriggersWithProbeStringInjection(self, RequestTrigger, ResponseTrigger):
+  def AddToTriggersWithProbeStringInjection(self, RequestTrigger, RequestTriggerDesc, ResponseTrigger, ResponseTriggerDesc):
     self.RequestTriggers.append(RequestTrigger)
     self.ResponseTriggers.append(ResponseTrigger)
+    self.RequestTriggerDescs.append(RequestTriggerDesc)
+    self.ResponseTriggerDescs.append(ResponseTriggerDesc)
     self.TriggerRequests.append(self.ps_req)
     self.TriggerResponses.append(self.ps_res)
     
@@ -914,8 +925,8 @@ class CrossSiteScripting(ActivePlugin):
       all_tags_and_attrs.append("    {0}) <i<b>>{1}<i</b>> attribute of <i<b>>{2}<i</b>> tag".format(i + 1, self.injectable_special_tags[i], self.injectable_special_attributes[i]))
     PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
     PR.Title = "Scriptless HTML Injection"
-    PR.Summary = "Scriptless HTML Injection has been detected in the '{0}' parameter of the {1} section of the request.<i<br>>It is possible to inject a remote URL in to the following sensitive HTML attributes:<i<br>>{2}  <i<br>><i<br>>{3}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, "<i<br>>".join(all_tags_and_attrs), self.GetTrace())
-    PR.Triggers.Add(payload, self.Scnr.InjectedRequest, payload, self.Scnr.InjectionResponse)
+    PR.Summary = "Scriptless HTML Injection has been detected in the '{0}' parameter of the {1} section of the request.<i<br>>It is possible to inject a remote URL in to the following sensitive HTML attributes:<i<br>>{2}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, "<i<br>>".join(all_tags_and_attrs))
+    PR.Triggers.Add(payload, "The payload in this request contains an absolute url. The payload is {0}".format(payload), self.Scnr.InjectedRequest, payload, "The absolute url from the injected payload has been found inside some sensitive attributes in the HTML in this response", self.Scnr.InjectionResponse)
     PR.Severity = FindingSeverity.High
     PR.Confidence = FindingConfidence.High
     self.Scnr.SetTraceTitle("Scriptless HTML Injection Found", 100)
@@ -931,7 +942,7 @@ class CrossSiteScripting(ActivePlugin):
     else:
       context = "Set-Cookie header"
     PR.Summary = "Cross-site Cookie Setting has been detected in the '{0}' parameter of the {1} section of the request. The value of this parameter is returned in the {2}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, context)
-    PR.Triggers.Add(self.ps, self.ps_req, self.ps, self.ps_res)
+    PR.Triggers.Add(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", self.ps_req, self.ps, "The random string from the payload has been found in the {0} of this response".format(context), self.ps_res)
     PR.Severity = FindingSeverity.Medium
     PR.Confidence = FindingConfidence.Medium
     self.Scnr.SetTraceTitle("Cross-site Cookie Setting", 50)
@@ -941,7 +952,7 @@ class CrossSiteScripting(ActivePlugin):
     PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
     PR.Title = "Charset Not Set By Server"
     PR.Summary = "The Charset of the response content is not explicitly set by the server. Lack of charset can cause the browser to guess the encoding type and this could lead to Cross-site Scripting by encoding the payload in encoding types like UTF-7."
-    PR.Triggers.Add("", self.base_req, "", self.base_res)
+    PR.Triggers.Add("", "", self.base_req, "", "This response does not have an explicit declaration for what character encoding is used in it.", self.base_res)
     PR.Severity = FindingSeverity.Medium
     PR.Confidence = FindingConfidence.Medium
     self.Scnr.SetTraceTitle("Charset Missing", 50)
@@ -950,9 +961,9 @@ class CrossSiteScripting(ActivePlugin):
   def ReportCharsetManipulation(self, inj_req, inj_res, payloads):
     PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
     PR.Title = "Charset Manipulation Possible"
-    PR.Summary = "Charset Manipulation Possible has been detected in the '{0}' parameter of the {1} section of the request.<i<br>>It is possible to set the charset of the response body to any desired encoding type.<i<br>><i<br>>{2}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, self.GetTrace())
+    PR.Summary = "Charset Manipulation Possible has been detected in the '{0}' parameter of the {1} section of the request.<i<br>>It is possible to set the charset of the response body to any desired encoding type.".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection)
     for i in range(len(payloads)):
-      PR.Triggers.Add(payloads[i], inj_req[i], payloads[i], inj_res[i])
+      PR.Triggers.Add(payloads[i], "The payload in this request is the name of character encoding type - {0}".format(payloads[i]), inj_req[i], payloads[i], "The character encoding of this response is set as {0}. This is caused by the payload.".format(payloads[i]), inj_res[i])
     PR.Severity = FindingSeverity.Medium
     PR.Confidence = FindingConfidence.High
     self.Scnr.SetTraceTitle("Charset Manipulation", 50)
@@ -971,8 +982,8 @@ class CrossSiteScripting(ActivePlugin):
     else:
       scope = "CSS"
     PR.Title = "In-domain {0} Inclusion".format(scope)
-    PR.Summary = "In-domain {0} Inclusion has been detected in the '{1}' parameter of the {2} section of the request.<i<br>>It is possible to set the location of {3} source URL to a resource within the same domain. If user's are allowed to upload text files on to this domain then an attacker can upload script as a regular text file and execute it using this vulnerability.<i<br>><i<br>>{4}".format(scope, self.Scnr.InjectedParameter, self.Scnr.InjectedSection, scope, self.GetTrace())
-    PR.Triggers.Add(self.ps, self.ps_req, "\r\n".join(all_vuln), self.ps_res)
+    PR.Summary = "In-domain {0} Inclusion has been detected in the '{1}' parameter of the {2} section of the request.<i<br>>It is possible to set the location of {3} source URL to a resource within the same domain. If user's are allowed to upload text files on to this domain then an attacker can upload script as a regular text file and execute it using this vulnerability.".format(scope, self.Scnr.InjectedParameter, self.Scnr.InjectedSection, scope)
+    PR.Triggers.Add(self.ps, "The payload in this request is random string just to check where this value it is reflected back in the response.", self.ps_req, "\r\n".join(all_vuln), "The random string from the payload has been found in the src attribute of tags loading {0} files.".format(scope), self.ps_res)
     PR.Severity = FindingSeverity.Medium
     PR.Confidence = FindingConfidence.High
     self.Scnr.SetTraceTitle("In-domain {0} Inclusion".format(scope), 50)
@@ -982,9 +993,9 @@ class CrossSiteScripting(ActivePlugin):
     if(len(self.RequestTriggers) > 0):
       PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
       PR.Title = "Cross-site Scripting Detected"
-      PR.Summary = "Cross-site Scripting has been detected in the '{0}' parameter of the {1} section of the request  <i<br>><i<br>>{2}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, self.GetTrace())
+      PR.Summary = "Cross-site Scripting has been detected in the '{0}' parameter of the {1} section of the request".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection)
       for i in range(len(self.RequestTriggers)):
-        PR.Triggers.Add(self.RequestTriggers[i], self.TriggerRequests[i], self.ResponseTriggers[i], self.TriggerResponses[i])
+        PR.Triggers.Add(self.RequestTriggers[i], self.RequestTriggerDescs[i], self.TriggerRequests[i], self.ResponseTriggers[i], self.ResponseTriggerDescs[i], self.TriggerResponses[i])
       PR.Type = FindingType.Vulnerability
       PR.Severity = FindingSeverity.High
       if self.Confidence == 3:
@@ -995,20 +1006,6 @@ class CrossSiteScripting(ActivePlugin):
         PR.Confidence = FindingConfidence.Low
       self.Scnr.AddFinding(PR)
       self.Scnr.SetTraceTitle("XSS Found", 100)
-
-  def GetTrace(self):
-    Trace = "<i<hh>>Scan Trace:<i</hh>><i<br>><i<br>>"
-    Trace = Trace + "This section contains trace information about the various tests that were performed during this particular scan, the payloads sent during these tests, the application's response to these payloads and the scanner's interpretation of these responses."
-    Trace = Trace + "<i<br>>This vulnerability was identified by <i<b>>Scan ID {0}<i</b>>".format(self.Scnr.ID)
-    
-    Trace = Trace + "<i<br>><i<br>>To view the requests and responses associated with this check please head over to the 'Scan Trace' section which is under the 'Automated Scanning' section. "
-    Trace = Trace + "<i<br>>There would be a list of scan traces in this section, select the trace entry with the values:<i<br>>    <i<cb>>SCAN ID<i</cb>> - {0}<i<br>>    <i<cb>>CHECK<i</cb>> - {1}<i<br>>    <i<cb>>SECTION<i</cb>> - {2}<i<br>>    <i<cb>>PARAMETER<i</cb>> - {3}".format(self.Scnr.ID, self.Name, self.Scnr.InjectedSection, self.Scnr.InjectedParameter)
-    Trace = Trace + "<i<br>><i<br>>Selecting the entry would display the trace overview with the list of payloads sent and the corresponding response code, time etc. After this click on the 'Load this Trace in Viewer' button to view the exact requests and responses associated with this particular check."
-    
-    Trace = Trace + "<i<br>><i<br>>In the trace information below you would see repeated occurrences of a number followed by the pipe character, <i<b>>eg: 245| Some text here<i</b>>. This number is the log id of the request sent corresponding to that line of scan trace. You can view this request and response from the 'Scan Log' section of the 'Logs' section by using this id as reference. "
-    
-    Trace = Trace + "<i<br>><i<br>>    <i<b>><< Trace Information Starts From Here >><i</b>><i<br>><i<br>>{0}<i<br>><i<br>>    <i<b>><< Trace Information Ends Here >><i</b>>".format(self.Scnr.GetTrace())
-    return Trace
 
 p = CrossSiteScripting()
 ActivePlugin.Add(p.GetInstance())

@@ -9,13 +9,13 @@ class HTMLAnalysis(PassivePlugin):
 	def GetInstance(self):
 		p = HTMLAnalysis()
 		p.Name = "HTML Analysis"
-		p.Version = "0.2"
+		p.Version = "0.4"
 		p.Description = "Passive plugin to analyze the Response HTML for potential vulnerabilities"
 		p.FileName = "HTMLAnalysis.py"
 		p.WorksOn = PluginWorksOn.Response
 		return p
 	
-	def Check(self, Sess, Results):
+	def Check(self, Sess, Results, ReportAll):
 		
 		if(Sess.Response.IsBinary):
 			return
@@ -23,8 +23,9 @@ class HTMLAnalysis(PassivePlugin):
 		if(not Sess.Response.IsHtml):
 			return
 	
-		ThreadStore.Put("Session", Sess)
-		ThreadStore.Put("Results", Results)
+		self.Sess = Sess
+		self.Results = Results
+		self.ReportAll = ReportAll
 		
 		Req = Sess.Request
 		Res = Sess.Response
@@ -38,17 +39,17 @@ class HTMLAnalysis(PassivePlugin):
 					Title = "Scripts loaded from External Domains"
 					Summary = "Script has been loaded in the page from {0} which is an external domain that might not be trustworthy".format(src_req.Host)
 					Signature = self.MakeSignature(Title, src_req.Host)
-					self.ReportTestLead(Title, Summary,"","",Signature)
+					self.ReportTestLead(Title, Summary, Req.BaseUrl,"This request is made to the domain - {0}".format(Req.Host),src_req.FullUrl,"This response loads a JavaScript document from the domain - {0}".format(src_req.Host), Signature)
 				if(Req.SSL and not src_req.SSL):
 					Title = "Insecure Scripts loaded inside Secure Page"
 					Summary = "Page loaded over SSL includes script that is loaded over HTTP, this compromises the integrity of the SSL layer"
 					Signature = self.MakeSignature(Title, src_req.UrlPath)
-					self.ReportVulnerability(Title, Summary,"",src_req.FullUrl,PluginResultConfidence.High, PluginResultSeverity.Medium, Signature)
+					self.ReportVulnerability(Title, Summary, "https://","This Request was made over HTTPS",src_req.FullUrl,"This response loads a JavaScript document from the HTTP url {0}".format(src_req.BaseUrl), FindingConfidence.High, FindingSeverity.Medium, Signature)
 				elif(src_req.SSL and not Req.SSL):
 					Title = "Secure Script loaded inside Insecure Page"
 					Summary = "Page loaded over HTTP includes script that is loaded over SSL, this compromises the integrity of the script"
 					Signature = self.MakeSignature(Title, src_req.UrlPath)
-					self.ReportTestLead(Title, Summary,"","",Signature)
+					self.ReportTestLead(Title, Summary, "http://","This Request was made over HTTP",src_req.FullUrl,"This response loads a JavaScript document from the SSL url {0}".format(src_req.BaseUrl), Signature)
 			except:
 				pass
 			
@@ -60,12 +61,12 @@ class HTMLAnalysis(PassivePlugin):
 					Title = "CSS loaded from External Domains"
 					Summary = "CSS document has been loaded in the page from {0} which is an external domain that might not be trustworthy".format(src_req.Host)
 					Signature = self.MakeSignature(Title, src_req.Host)
-					self.ReportTestLead(Title, Summary,"","",Signature)
+					self.ReportTestLead(Title, Summary, Req.BaseUrl,"This request is made to the domain - {0}".format(Req.Host),src_req.FullUrl,"This response loads a CSS document from the domain - {0}".format(src_req.Host), Signature)
 				if(Req.SSL and not src_req.SSL):
 					Title = "Insecure CSS loaded inside Secure Page"
 					Summary = "Page loaded over SSL includes CSS that is loaded over HTTP, this compromises the integrity of the SSL layer"
 					Signature = self.MakeSignature(Title, src_req.UrlPath)
-					self.ReportVulnerability(Title, Summary,"",src_req.FullUrl,PluginResultConfidence.High, PluginResultSeverity.Medium, Signature)
+					self.ReportVulnerability(Title, Summary, "https://","This Request was made over HTTPS",src_req.FullUrl,"This response loads a CSS document from the HTTP url {0}".format(src_req.BaseUrl), FindingConfidence.High, FindingSeverity.Medium, Signature)
 			except:
 				pass
 		
@@ -77,17 +78,17 @@ class HTMLAnalysis(PassivePlugin):
 					Title = "IFRAME loaded from External Domains"
 					Summary = "IFRAME has been loaded in the page from {0} which is an external domain that might not be trustworthy".format(src_req.Host)
 					Signature = self.MakeSignature(Title, src_req.Host)
-					self.ReportTestLead(Title, Summary,"","",Signature)
+					self.ReportTestLead(Title, Summary, Req.BaseUrl,"This request is made to the domain - {0}".format(Req.Host),src_req.FullUrl,"This response contains an IFRAME from the domain - {0}".format(src_req.Host), Signature)
 				if(Req.SSL and not src_req.SSL):
 					Title = "Insecure IFRAMEs loaded inside Secure Page"
 					Summary = "Page loaded over SSL includes IFRAME that is loaded over HTTP, this compromises the integrity of the SSL layer"
 					Signature = self.MakeSignature(Title, src_req.UrlPath)
-					self.ReportVulnerability(Title, Summary,"",src_req.FullUrl,PluginResultConfidence.High, PluginResultSeverity.Medium, Signature)
+					self.ReportVulnerability(Title, Summary, "https://","This Request was made over HTTPS",src_req.FullUrl,"This response contains an IFRAME from the HTTP url {0}".format(src_req.BaseUrl), FindingConfidence.High, FindingSeverity.Medium, Signature)
 				elif(src_req.SSL and not Req.SSL):
 					Title = "Secure IFRAME loaded inside Insecure Page"
-					Summary = "Page loaded over HTTP includes script that is loaded over SSL, this compromises the integrity of the IFRAME"
+					Summary = "Page loaded over HTTP includes IFRAME that is loaded over SSL, this compromises the integrity of the IFRAME"
 					Signature = self.MakeSignature(Title, src_req.UrlPath)
-					self.ReportTestLead(Title, Summary,"","",Signature)
+					self.ReportTestLead(Title, Summary, "http://","This Request was made over HTTP",src_req.FullUrl,"This response contains an IFRAME from the SSL url {0}".format(src_req.BaseUrl), Signature)
 			except:
 				pass
 		
@@ -102,35 +103,35 @@ class HTMLAnalysis(PassivePlugin):
 					Title = "Form contents submitted to External Domains"
 					Summary = "Form contents in the page are submitted to {0} which is an external domain that might not be trustworthy".format(src_req.Host)
 					Signature = self.MakeSignature(Title, "{0}{1}".format(src_req.Host, form_signature))
-					self.ReportTestLead(Title, Summary,"",form.OuterHtml,Signature)
+					self.ReportTestLead(Title, Summary, Req.BaseUrl,"This request is made to the domain - {0}".format(Req.Host),src_req.FullUrl,"An HTML form loaded from {0} is submitted to {1}".format(Req.Host, src_req.Host), Signature)
 				if(Req.SSL and not src_req.SSL):
 					if(self.IsSensitiveForm(form, form_signature)):
 						Title = "Secure Page submits Sensitive Form contents to InSecure Page"
 						Summary = "Form contained inside page loaded over SSL submits its contents, which includes password fields, to another page over HTTP"
 						Signature = self.MakeSignature(Title, form_signature)
-						self.ReportVulnerability(Title, Summary,"",form.OuterHtml,PluginResultConfidence.High, PluginResultSeverity.Medium, Signature)
+						self.ReportVulnerability(Title, Summary, "https://","This Request was made over HTTPS",src_req.FullUrl,"An HTML form in this response which contains password fields, submits its contents to the HTTP url - {0}".format(src_req.FullUrl) ,FindingConfidence.High, FindingSeverity.Medium, Signature)
 					else:
 						Title = "Secure Page submits Form contents to InSecure Page"
 						Summary = "Form contained inside page loaded over SSL submits its contents to another page over HTTP"
 						Signature = self.MakeSignature(Title, form_signature)
-						self.ReportVulnerability(Title, Summary,"",form.OuterHtml,PluginResultConfidence.High, PluginResultSeverity.Low, Signature)
+						self.ReportVulnerability(Title, Summary, "https://","This Request was made over HTTPS",src_req.FullUrl,"An HTML form in this response submits its contents to the HTTP url - {0}".format(src_req.FullUrl), FindingConfidence.High, FindingSeverity.Low, Signature)
 				elif(src_req.SSL and not Req.SSL):
 					if(self.IsSensitiveForm(form, form_signature)):
 						Title = "Secure Form with Sensitive contents loaded over InSecure Page"
 						Summary = "Form contained inside page loaded over HTTP submits its contents, which includes password fields, to another page over HTTPS. Loading the form over HTTP compromises the SSL security required for this form submission."
 						Signature = self.MakeSignature(Title, form_signature)
-						self.ReportVulnerability(Title, Summary,"",form.OuterHtml,PluginResultConfidence.High, PluginResultSeverity.Medium, Signature)
+						self.ReportVulnerability(Title, Summary, "http://","This Request was made over HTTP",src_req.FullUrl,"An HTML form in this response which contains password fields, submits its contents to the HTTPS url - {0}".format(src_req.FullUrl), FindingConfidence.High, FindingSeverity.Medium, Signature)
 					else:
 						Title = "Secure Form loaded over InSecure Page"
-						Summary = "Form contained inside page loaded over HTTP submits its contents to another page over HTTPS. Loading the form over HTTP compromises the SSL security required for this form submission."
+						Summary = "Form contained inside page loaded over HTTP but submits its contents to another page over HTTPS. Loading the form over HTTP compromises the SSL security required for this form submission."
 						Signature = self.MakeSignature(Title, form_signature)
-						self.ReportVulnerability(Title, Summary,"",form.OuterHtml,PluginResultConfidence.High, PluginResultSeverity.Low, Signature)
+						self.ReportVulnerability(Title, Summary, "http://","This Request was made over HTTP",src_req.FullUrl,"An HTML form in this response submits its contents to the HTTPS url - {0}".format(src_req.FullUrl), FindingConfidence.High, FindingSeverity.Low, Signature)
 			except:
 				if(self.IsSensitiveForm(form, form_signature) and not Req.SSL):
 					Title = "Sensitive Form loaded and submitted Insecurely"
 					Summary = "Form with sensitive contents, which includes password fields, is loaded and submitted over HTTP"
 					Signature = self.MakeSignature(Title, form_signature)
-					self.ReportVulnerability(Title, Summary,"",form.OuterHtml,PluginResultConfidence.High, PluginResultSeverity.Medium, Signature)
+					self.ReportVulnerability(Title, Summary, "http://","This Request was made over HTTP",form.OuterHtml,"The HTML form containing password fields is displayed below. The unnecessary elements from this form have been stripped away for clarity.", FindingConfidence.High, FindingSeverity.Medium, Signature)
 		
 	def IsSensitiveForm(self, form, form_signature):
 		AutoComplete = True
@@ -157,7 +158,7 @@ class HTMLAnalysis(PassivePlugin):
 					Title = "AutoComplete Enabled on Password Fields"
 					Summary = "AutoComplete feature has not been disabled on the form/fields that accept Passwords from users"
 					Signature = self.MakeSignature(Title, form_signature)
-					self.ReportVulnerability(Title, Summary,"","",PluginResultConfidence.High, PluginResultSeverity.Low, Signature)
+					self.ReportVulnerability(Title, Summary,"","","","This response contains INPUT elements whose type attribute is password but their autocomplete attribute is not set to 'off'",FindingConfidence.High, FindingSeverity.Low, Signature)
 					return True
 		return False
 	
@@ -218,34 +219,34 @@ class HTMLAnalysis(PassivePlugin):
 		return True
 		
 		
-	def ReportVulnerability(self, Title, Summary, RequestTrigger, ResponseTrigger, Confidence, Severity, Signature):
-		Results = ThreadStore.Get("Results")
-		Sess = ThreadStore.Get("Session")
-		if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.Vulnerability, Signature):
-			PR = PluginResult(Sess.Request.Host)
+	def ReportVulnerability(self, Title, Summary, RequestTrigger, RequestTriggerDesc, ResponseTrigger, ResponseTriggerDesc, Confidence, Severity, Signature):
+		#Results = ThreadStore.Get("Results")
+		#Sess = ThreadStore.Get("Session")
+		if self.ReportAll or self.IsSignatureUnique(self.Sess.Request.BaseUrl, FindingType.Vulnerability, Signature):
+			PR = Finding(self.Sess.Request.BaseUrl)
 			PR.Title = Title
 			PR.Summary = Summary
-			PR.Triggers.Add(RequestTrigger, Sess.Request, ResponseTrigger, Sess.Response)
+			PR.Triggers.Add(RequestTrigger, RequestTriggerDesc, self.Sess.Request, ResponseTrigger, ResponseTriggerDesc, self.Sess.Response)
 			PR.Signature = Signature
 			PR.Confidence = Confidence
 			PR.Severity = Severity
-			Results.Add(PR)
+			self.Results.Add(PR)
 		
-	def ReportTestLead(self, Title, Summary, RequestTrigger, ResponseTrigger, Signature):
-		Results = ThreadStore.Get("Results")
-		Sess = ThreadStore.Get("Session")
-		if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.TestLead, Signature):
-			PR = PluginResult(Sess.Request.Host)
+	def ReportTestLead(self, Title, Summary, RequestTrigger, RequestTriggerDesc, ResponseTrigger, ResponseTriggerDesc, Signature):
+		#Results = ThreadStore.Get("Results")
+		#Sess = ThreadStore.Get("Session")
+		if self.ReportAll or self.IsSignatureUnique(self.Sess.Request.BaseUrl, FindingType.TestLead, Signature):
+			PR = Finding(self.Sess.Request.BaseUrl)
 			PR.Title = Title
 			PR.Summary = Summary
-			PR.Triggers.Add(RequestTrigger, Sess.Request, ResponseTrigger, Sess.Response)
+			PR.Triggers.Add(RequestTrigger, RequestTriggerDesc, self.Sess.Request, ResponseTrigger, ResponseTriggerDesc, self.Sess.Response)
 			PR.Signature = Signature
-			PR.ResultType = PluginResultType.TestLead
-			Results.Add(PR)
+			PR.Type = FindingType.TestLead
+			self.Results.Add(PR)
 
 	def MakeSignature(self, Title, VulnSignature):
-		Sess =  ThreadStore.Get("Session")
-		Signature = '{0}|{1}|{2}|{3}:'.format(Sess.Request.SSL.ToString(), Sess.Request.Method, Title, VulnSignature)
+		#Sess =  ThreadStore.Get("Session")
+		Signature = '{0}|{1}|{2}|{3}:'.format(self.Sess.Request.SSL.ToString(), self.Sess.Request.Method, Title, VulnSignature)
 		return Signature
 
 

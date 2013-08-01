@@ -16,7 +16,7 @@ class SQLInjection(ActivePlugin):
     p = SQLInjection()
     p.Name = "SQL Injection"
     p.Description = "Plugin to discover SQL Injection vulnerabilities"
-    p.Version = "0.5"
+    p.Version = "0.6"
     return p
   
   #Override the Check method of the base class with custom functionlity
@@ -25,6 +25,8 @@ class SQLInjection(ActivePlugin):
     self.Scnr = Scnr
     self.RequestTriggers = []
     self.ResponseTriggers = []
+    self.RequestTriggerDescs = []
+    self.ResponseTriggerDescs = []
     self.TriggerRequests = []
     self.TriggerResponses = []
     self.TriggerCount = 0
@@ -32,17 +34,23 @@ class SQLInjection(ActivePlugin):
     self.Confidence = 0
     self.base_response = self.Scnr.BaseResponse
     
+    self.ErrorCount = [0,0,0]
+    self.Errors = []
+    self.ErrorTriggerCount = 0
+    
     self.Scnr.Trace("<i<br>><i<h>>Checking for SQL Injection:<i</h>>")
     overall_error_score = self.CheckForErrorBasedSQLi()
     overall_blind_score = self.CheckForBlindSQLi()
     
     overall_score = overall_error_score + overall_blind_score
     
-    if(overall_score > 7):
+    if len(self.RequestTriggers) == self.ErrorTriggerCount and  (self.ErrorCount[0] + self.ErrorCount[1] + self.ErrorCount[2]) > 0 and (self.ErrorCount[0] == self.ErrorCount[1] == self.ErrorCount[2]):
+      self.ReportSQLError(self.Errors)
+    elif overall_score > 7:
       self.ReportSQLInjection(FindingConfidence.High)
-    elif(overall_score > 4):
+    elif overall_score > 4:
       self.ReportSQLInjection(FindingConfidence.Medium)
-    elif(overall_score > 3):
+    elif overall_score > 3:
       self.ReportSQLInjection(FindingConfidence.Low)
     #overall_blind_score = self.CheckForBlindSQLi(Request, Scanner)
     #overall_score = overall_error_score + overall_blind_score
@@ -50,7 +58,11 @@ class SQLInjection(ActivePlugin):
     #	return
   def CheckForErrorBasedSQLi(self):
     self.Scnr.Trace("<i<br>><i<h>>Checking for Error based Injection:<i</h>>")
-    payload_responses = []
+    self.Scnr.Trace("<i<br>>Sending a request with a normal value to get a Error baseline")
+    self.Scnr.RequestTrace("  Injected 123 - ")
+    err_base_res = self.Scnr.Inject("123")
+    self.Scnr.ResponseTrace("  ==> Code {0} | Length {0}".format(err_base_res.Code, err_base_res.BodyLength))
+    
     payloads = ["'", "\"", "\xBF'\"(", "(", ")"]
     final_error_score = 0
     for payload in payloads:
@@ -59,14 +71,15 @@ class SQLInjection(ActivePlugin):
         inj_res = self.Scnr.RawInject(payload)
       else:
         inj_res = self.Scnr.Inject(payload)
-      score = self.AnalyseInjectionResultForError(payload, inj_res)
+      score = self.AnalyseInjectionResultForError(payload, inj_res, err_base_res)
       if score > final_error_score:
         final_error_score = score
+    self.ErrorTriggerCount = len(self.RequestTriggers)
     return final_error_score
   
-  def AnalyseInjectionResultForError(self, payload, payload_response):
+  def AnalyseInjectionResultForError(self, payload, payload_response, err_base_res):
     res = payload_response
-    diff_error_no = False#do base response and injeted response have different number of error matches
+
     triggers = []
     all_error_matches = {}
     
@@ -77,30 +90,35 @@ class SQLInjection(ActivePlugin):
       matches = error_re.findall(res.BodyString)
       if len(matches) > 0:
         original_error_matches = error_re.findall(self.base_response.BodyString)
-        all_error_matches[error_re_raw] = [len(matches),len(original_error_matches)]
+        base_error_matches = error_re.findall(err_base_res.BodyString)
+        all_error_matches[error_re_raw] = [len(matches),len(original_error_matches), len(base_error_matches)]
         triggers.extend(matches)
-        if(len(matches) != len(original_error_matches)):
-          diff_error_no = True
+        
+        self.ErrorCount[0] = self.ErrorCount[0] + len(matches)
+        self.ErrorCount[1] = self.ErrorCount[1] + len(original_error_matches)
+        self.ErrorCount[2] = self.ErrorCount[2] + len(base_error_matches)
     
-    if(len(all_error_matches) > 0):
-      for error_key,(inj_matches,base_matches) in all_error_matches.items():
-        self.Scnr.Trace("	    <i<cr>>Got {0} occurance[s] of error signature. Normal Response had {1} occurance[s]<i</cr>>. <i<b>>Error Signature:<i</b>> {2}".format(str(inj_matches), str(base_matches), error_key))
-        if diff_error_no:
-          error_score = 7
-        else:
+    if len(all_error_matches) > 0:
+      self.Errors.extend(triggers)
+      for error_key,(inj_matches,base_matches,base_err_matches) in all_error_matches.items():
+        self.Scnr.ResponseTrace("      <i<cr>>Got {0} occurance[s] of error signature. Normal Response had {1} occurance[s]<i</cr>>. Error Baseline Response had {2} occurance[s]<i</cr>>.<i<b>>Error Signature:<i</b>> {3}".format(inj_matches, base_matches, base_err_matches, error_key))
+        if self.ErrorCount[0] == self.ErrorCount[1] == self.ErrorCount[2]:
           error_score = 4
+        else:
+          error_score = 7
     else:
-      self.Scnr.Trace("	    No errors")
+      self.Scnr.ResponseTrace("      No errors")
     
     if error_score > 0:
       self.RequestTriggers.append(payload)
+      self.RequestTriggerDescs.append("The payload in this request is meant to trigger database error messages. The payload is {0}.".format(payload))
       self.ResponseTriggers.append("\r\n".join(triggers))
+      self.ResponseTriggerDescs.append("This response contains database error messages.")
       self.TriggerRequests.append(self.Scnr.InjectedRequest.GetClone())
       self.TriggerResponses.append(res)
       self.TriggerCount = self.TriggerCount + 1
       
       reason = self.GetErrorReason(payload, triggers, self.TriggerCount)
-      reason = "<i<b>><i<cb>>Reason {0}:<i</b>><i</cb>> <i<br>>".format(len(self.reasons) + 1) + reason
       self.reasons.append(reason)
       
     return error_score
@@ -269,9 +287,22 @@ class SQLInjection(ActivePlugin):
             self.RequestTriggers.extend(payloads)
             self.TriggerRequests.extend(requests)
             self.TriggerResponses.extend(responses)
-            self.TriggerCount = self.TriggerCount + 6
+            
             for i in range(len(payloads)):
               self.ResponseTriggers.append("")
+              self.ResponseTriggerDescs.append("Refer to the 'Reasons' section of this vulnerabilty's description to understand how to interpret this response.")
+              if i < 4:
+                if sym == "+":
+                  self.RequestTriggerDescs.append("The payload in this request tries to add the numbers {0} and {1}.".format(plus_left[i], plus_right[i]))
+                else:
+                  self.RequestTriggerDescs.append("The payload in this request tries to subtract the number {0} from {1}.".format(minus_left[i], minus_right[i]))
+              else:
+                if sym == "+":
+                  self.RequestTriggerDescs.append("The payload in this request is an invalid attempt to add the number {0} with string {1}.".format(plus_left[i], plus_right[i]))
+                else:
+                  self.RequestTriggerDescs.append("The payload in this request is an invalid attempt to subtract the number {0} from the string {1}.".format(minus_left[i], minus_right[i]))
+            
+            self.TriggerCount = self.TriggerCount + 6
             
             self.second_group = []
             for item in ["A", "B", "C", "D", "E", "F"]:
@@ -282,7 +313,6 @@ class SQLInjection(ActivePlugin):
               reason = self.GetBlindMathAddReason(payloads, plus_left[0] + plus_right[0], plus_left[2] + plus_right[2], self.first_group, self.second_group, self.TriggerCount)
             else:
               reason = self.GetBlindMathSubtractReason(payloads, minus_left[0] - minus_right[0], minus_left[2] - minus_right[2], self.first_group, self.second_group, self.TriggerCount)
-            reason = "<i<b>><i<cb>>Reason {0}:<i</b>><i</cb>> <i<br>>".format(len(self.reasons) + 1) + reason
             self.reasons.append(reason)
             
             return confidence
@@ -430,13 +460,22 @@ class SQLInjection(ActivePlugin):
             self.RequestTriggers.extend(payloads)
             self.TriggerRequests.extend(requests)
             self.TriggerResponses.extend(responses)
+            non_db = []
+            non_db.extend(keys)
+            non_db.remove(db)
             for i in range(len(payloads)):
               self.ResponseTriggers.append("")
-              
+              self.RequestTriggerDescs.append("The payload in this request tries to concatenate two strings as per {0} database's syntax. The payload is {1}".format(keys[i], payloads[i]))
+              if keys[i] == db:
+                self.ResponseTriggerDescs.append("This response is different from the responses recieved for the payloads that used {0} and {1} databases' concatenation syntax.".format(non_db[0], non_db[1]))
+              else:
+                non_db.remove(keys[i])
+                self.ResponseTriggerDescs.append("This response is different from the response recieved for the payloads that used {0} database's concatenation syntax but similar to the response for the payload that used {1} database's concatenation syntax".format(db, non_db[0]))
+                non_db.append(keys[i])
+            
             self.TriggerCount = self.TriggerCount + 3
             
             reason = self.GetBlindConcatReason(payloads, db, self.TriggerCount)
-            reason = "<i<b>><i<cb>>Reason {0}:<i</b>><i</cb>> <i<br>>".format(len(self.reasons) + 1) + reason
             self.reasons.append(reason)
             
             return confidence
@@ -501,6 +540,7 @@ class SQLInjection(ActivePlugin):
       payloads = []
       requests = []
       responses = []
+      conditions = []
       sc = SimilarityChecker()
       self.Scnr.Trace("<i<br>>")
       for i in range(len(trailers)):
@@ -508,6 +548,7 @@ class SQLInjection(ActivePlugin):
         self.Scnr.RequestTrace("  Request Key: '{0}' - Injecting {1}".format(keys[i], payload))
         res = self.Scnr.Inject(payload)
         payloads.append(payload)
+        conditions.append(trailers[i].replace("<q>", quote))
         requests.append(self.Scnr.InjectedRequest.GetClone())
         responses.append(res)
         sc.Add(keys[i], res)
@@ -562,9 +603,16 @@ class SQLInjection(ActivePlugin):
           self.TriggerResponses.extend(responses)
           for i in range(len(payloads)):
             self.ResponseTriggers.append("")
+            if i == 0 or i == 2:
+                self.RequestTriggerDescs.append("The payload in this request contains the conditional operator '{0}' followed by the SQL condition {1} which evaluates to true. The payload is {2}".format(operator, conditions[i], payloads[i]))
+            else:
+                self.RequestTriggerDescs.append("The payload in this request contains the conditional operator '{0}' followed by the SQL condition {1} which evaluates to false. The payload is {2}".format(operator, conditions[i], payloads[i]))       
+          self.ResponseTriggerDescs.append("This response is the result of the first boolean true condition based payload. This response is equal to the response of the second boolean true condition payload and different from the responses of the boolean false condition payloads.")
+          self.ResponseTriggerDescs.append("This response is the result of the first boolean false condition based payload. This response is equal to the response of the second boolean false condition payload and different from the responses of the boolean true condition payloads.")
+          self.ResponseTriggerDescs.append("This response is the result of the second boolean true condition based payload. This response is equal to the response of the first boolean true condition payload and different from the responses of the boolean false condition payloads.")
+          self.ResponseTriggerDescs.append("This response is the result of the second boolean false condition based payload. This response is equal to the response of the first boolean false condition payload and different from the responses of the boolean true condition payloads.")
           self.TriggerCount = self.TriggerCount + 4
           reason = self.GetBlindBoolReason(payloads, operator, self.TriggerCount)
-          reason = "<i<b>><i<cb>>Reason {0}:<i</b>><i</cb>> <i<br>>".format(len(self.reasons) + 1) + reason
           self.reasons.append(reason)
           return confidence
     return 0
@@ -632,13 +680,17 @@ class SQLInjection(ActivePlugin):
       elif i == 1:
         if res.RoundTrip >= (time * 1000):
           self.Scnr.ResponseTrace("{0} <i<br>><i<cr>>Delay Observed Again! Indicates Presence of SQL Injection<i</cr>>".format(res_trace))
+          
           self.RequestTriggers.append(payload)
+          self.RequestTriggerDescs.append("The payload in this request contains a SQL query snippet which if executed will cause a delay of {0} milliseconds. The payload is {1}".format(time * 1000, payload))
           self.TriggerRequests.append(self.Scnr.InjectedRequest.GetClone())
-          self.TriggerResponses.append(res)
+          
           self.ResponseTriggers.append("")
+          self.ResponseTriggerDescs.append("It took {0} milliseconds to get this response. It took so long because of the {1} milliseconds delay caused by the payload.".format(res.RoundTrip, time * 1000))
+          self.TriggerResponses.append(res)
+          
           self.TriggerCount = self.TriggerCount + 1
           reason = self.GetBlindTimeReason(payload, time * 1000, res.RoundTrip, avg_time, self.TriggerCount)
-          reason = "<i<b>><i<cb>>Reason {0}:<i</b>><i</cb>> <i<br>>".format(len(self.reasons) + 1) + reason
           self.reasons.append(reason)
           #self.ReportSQLInjection()
           return 1
@@ -651,14 +703,33 @@ class SQLInjection(ActivePlugin):
     self.Scnr.SetTraceTitle("SQLi Found", 100)
     PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
     PR.Title = "SQL Injection Detected"
-    PR.Summary = "SQL Injection has been detected in the '{0}' parameter of the {1} section of the request.<i<br>><i<br>>{2}<i<br>><i<br>>{3}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, self.GetSummary(), self.GetTrace())
+    PR.Summary = "SQL Injection has been detected in the '{0}' parameter of the {1} section of the request.<i<br>><i<br>>{2}".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection, self.GetSummary())
+    for reason in self.reasons:
+      PR.AddReason(reason)
+      
     for i in range(len(self.RequestTriggers)):
-      PR.Triggers.Add(self.RequestTriggers[i],self.TriggerRequests[i],self.ResponseTriggers[i],self.TriggerResponses[i])
+      PR.Triggers.Add(self.RequestTriggers[i], self.RequestTriggerDescs[i], self.TriggerRequests[i], self.ResponseTriggers[i], self.ResponseTriggerDescs[i], self.TriggerResponses[i])
     PR.Type = FindingType.Vulnerability
     PR.Severity = FindingSeverity.High
     PR.Confidence = Confidence
     self.Scnr.AddFinding(PR)
   
+  def ReportSQLError(self, Errors):
+    self.Scnr.SetTraceTitle("SQL Error Messages Found", 100)
+    PR = Finding(self.Scnr.InjectedRequest.BaseUrl)
+    PR.Title = "SQL Error Messages Found"
+    Summary = "SQL Error Messages have been found in the response when testing the '{0}' parameter of the {1} section of the request. All checks performed to returned negative results so the reason why these error messages appear cannot be determined.<i<br>>".format(self.Scnr.InjectedParameter, self.Scnr.InjectedSection)
+    Summary = Summary + "The error messages are:<i<br>>"
+    for Error in Errors:
+      Summary = Summary + "<i<cr>>{0}<i</cr>><i<br>>".format(Error)
+    PR.Summary = Summary
+    if len(self.RequestTriggers) > 0:
+      PR.Triggers.Add("", "", self.TriggerRequests[0], "\r\n".join(Errors), "The response contained {0} SQL error messages".format(len(Errors)), self.TriggerResponses[0])
+    PR.Type = FindingType.Vulnerability
+    PR.Severity = FindingSeverity.Medium
+    PR.Confidence = FindingConfidence.High
+    self.Scnr.AddFinding(PR)
+
   def SetUp(self):
     err_regex_file = open(Config.Path + "\\plugins\\active\\sql_error_regex.txt")
     err_regex_file.readline()#Ignore the first line containing comments
@@ -678,25 +749,8 @@ class SQLInjection(ActivePlugin):
       if len(tct) > 0:
         self.time_check.append(tct)
 
-  def GetTrace(self):
-    Trace = "<i<hh>>Scan Trace:<i</hh>><i<br>><i<br>>"
-    Trace = Trace + "This section contains trace information about the various tests that were performed during this particular scan, the payloads sent during these tests, the application's response to these payloads and the scanner's interpretation of these responses."
-    Trace = Trace + "<i<br>>This vulnerability was identified by <i<b>>Scan ID {0}<i</b>>".format(self.Scnr.ID)
-    
-    Trace = Trace + "<i<br>><i<br>>To view the requests and responses associated with this check please head over to the 'Scan Trace' section which is under the 'Automated Scanning' section. "
-    Trace = Trace + "<i<br>>There would be a list of scan traces in this section, select the trace entry with the values:<i<br>>    <i<cb>>SCAN ID<i</cb>> - {0}<i<br>>    <i<cb>>CHECK<i</cb>> - {1}<i<br>>    <i<cb>>SECTION<i</cb>> - {2}<i<br>>    <i<cb>>PARAMETER<i</cb>> - {3}".format(self.Scnr.ID, self.Name, self.Scnr.InjectedSection, self.Scnr.InjectedParameter)
-    Trace = Trace + "<i<br>><i<br>>Selecting the entry would display the trace overview with the list of payloads sent and the corresponding response code, time etc. After this click on the 'Load this Trace in Viewer' button to view the exact requests and responses associated with this particular check."
-    
-    Trace = Trace + "<i<br>><i<br>>In the trace information below you would see repeated occurrences of a number followed by the pipe character, <i<b>>eg: 245| Some text here<i</b>>. This number is the log id of the request sent corresponding to that line of scan trace. You can view this request and response from the 'Scan Log' section of the 'Logs' section by using this id as reference. "
-    
-    Trace = Trace + "<i<br>><i<br>>    <i<b>><< Trace Information Starts From Here >><i</b>><i<br>><i<br>>{0}<i<br>><i<br>>    <i<b>><< Trace Information Ends Here >><i</b>>".format(self.Scnr.GetTrace())
-    return Trace
-
   def GetSummary(self):
     Summary = "SQL Injection is an issue where it is possible execute SQL queries on the database being used on the server-side. For more details on this issue refer <i<cb>>https://www.owasp.org/index.php/SQL_Injection<i</cb>><i<br>><i<br>>"
-    Summary = Summary + "IronWASP has reported this issue because of the following reasons:<i<br>><i<br>>"
-    for reason in self.reasons:
-      Summary = Summary + reason + "<i<br>><i<br>>"
     return Summary
   
   def GetErrorReason(self, payload, errors, Trigger):
@@ -720,15 +774,14 @@ class SQLInjection(ActivePlugin):
     Reason = Reason + "This error message is usually associated with SQL query related errors and it appears that the payload was able to break out of the data context and cause this error. "
     Reason = Reason + "This is an indication of SQL Injection."
     
-    #Trigger
-    Reason = Reason + "<i<br>><i<br>>The request and response associated with this check can be seen by clicking on Trigger {0}.".format(Trigger)
-    Reason = Reason + "<i<br>>Doing a right-click on a Trigger id will show a menu with options to resend selected request or to send it after editing. Click on the 'Select this Request for Manual Testing' option in that menu for this feature."
+    ReasonType = "Error"
     
     #False Positive Check
-    Reason = Reason + "<i<br>><i<br>><i<cg>><i<b>>False Positive Check:<i</b>><i</cg>><i<br>>"
-    Reason = Reason + "Manually analyze the response received for the payload and confirm if the error message actually is because of some SQL related exception on the server-side. Try sending the same request without the payload and check if the error goes away."
-    Reason = Reason + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
-    return Reason
+    FalsePositiveCheck = "Manually analyze the response received for the payload and confirm if the error message actually is because of some SQL related exception on the server-side. Try sending the same request without the payload and check if the error goes away."
+    FalsePositiveCheck = FalsePositiveCheck + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
+    
+    FR = FindingReason(Reason, ReasonType, Trigger, FalsePositiveCheck)
+    return FR
 
   def GetBlindMathAddReason(self, payloads, first_sum, second_sum, first_group, second_group, Trigger):
     Reason = "IronWASP sent six payload to the application with SQL code snippets in them.<i<br>>"
@@ -764,15 +817,14 @@ class SQLInjection(ActivePlugin):
       Reason = Reason + "Payload E and F are invalid addition attempts so their responses are different. If the application was not actually performing addition then all six payloads should have returned very similar responses. "
     Reason = Reason + "Therefore this indicates that SQL syntax from the payload is executed as part of the SQL query on the server."
     
-    #Trigger
-    Reason = Reason + "<i<br>><i<br>>The request and response associated with this check can be seen by clicking on Triggers {0}, {1}, {2}, {3}, {4} and {5}.".format(Trigger-5, Trigger-4, Trigger-3, Trigger-2, Trigger-1, Trigger)
-    Reason = Reason + "<i<br>>Doing a right-click on a Trigger id will show a menu with options to resend selected request or to send it after editing. Click on the 'Select this Request for Manual Testing' option in that menu for this feature."
+    ReasonType = "MathAdd"
     
     #False Positive Check
-    Reason = Reason + "<i<br>><i<br>><i<cg>><i<b>>False Positive Check:<i</b>><i</cg>><i<br>>"
-    Reason = Reason + "Manually analyze the responses received for the six payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with different numbers and check if this behaviour is repeated."
-    Reason = Reason + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
-    return Reason
+    FalsePositiveCheck = "Manually analyze the responses received for the six payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with different numbers and check if this behaviour is repeated."
+    FalsePositiveCheck = FalsePositiveCheck + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
+    
+    FR = FindingReason(Reason, ReasonType, [Trigger-5, Trigger-4, Trigger-3, Trigger-2, Trigger-1, Trigger], FalsePositiveCheck)
+    return FR
 
   def GetBlindMathSubtractReason(self, payloads, first_diff, second_diff, first_group, second_group, Trigger):
     Reason = "IronWASP sent six payload to the application with SQL code snippets in them.<i<br>>"
@@ -809,15 +861,14 @@ class SQLInjection(ActivePlugin):
       Reason = Reason + "Payload E and F are invalid subtraction attempts so their responses are different. If the application was not actually performing subtraction then all six payloads should have returned very similar responses. "
     Reason = Reason + "Therefore this indicates that SQL syntax from the payload is executed as part of the SQL query on the server."
     
-    #Trigger
-    Reason = Reason + "<i<br>><i<br>>The request and response associated with this check can be seen by clicking on Trigger {0}, {1}, {2}, {3}, {4} and {5}.".format(Trigger-5, Trigger-4, Trigger-3, Trigger-2, Trigger-1, Trigger)
-    Reason = Reason + "<i<br>>Doing a right-click on a Trigger id will show a menu with options to resend selected request or to send it after editing. Click on the 'Select this Request for Manual Testing' option in that menu for this feature."
+    ReasonType = "MathSubtract"
     
     #False Positive Check
-    Reason = Reason + "<i<br>><i<br>><i<cg>><i<b>>False Positive Check:<i</b>><i</cg>><i<br>>"
-    Reason = Reason + "Manually analyze the responses received for the six payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with different numbers and check if this behaviour is repeated."
-    Reason = Reason + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
-    return Reason
+    FalsePositiveCheck = "Manually analyze the responses received for the six payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with different numbers and check if this behaviour is repeated."
+    FalsePositiveCheck = FalsePositiveCheck + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
+    
+    FR = FindingReason(Reason, ReasonType, [Trigger-5, Trigger-4, Trigger-3, Trigger-2, Trigger-1, Trigger], FalsePositiveCheck)
+    return FR
 
   def GetBlindConcatReason(self, payloads, db, Trigger):
     Reason = "IronWASP sent three payloads to the application with SQL code snippets in them.<i<br>>"
@@ -865,15 +916,14 @@ class SQLInjection(ActivePlugin):
     Reason = Reason + "If the application was not actually performing the concatenation then all three payload should have received very similar responses. "
     Reason = Reason + "Therefore this indicates that SQL syntax from the payload is executed as part of the SQL query on the server."
 
-    #Trigger
-    Reason = Reason + "<i<br>><i<br>>The request and response associated with this check can be seen by clicking on Triggers {0}, {1} and {2}.".format(Trigger-2, Trigger-1, Trigger)
-    Reason = Reason + "<i<br>>Doing a right-click on a Trigger id will show a menu with options to resend selected request or to send it after editing. Click on the 'Select this Request for Manual Testing' option in that menu for this feature."
+    ReasonType = "Concat"
     
     #False Positive Check
-    Reason = Reason + "<i<br>><i<br>><i<cg>><i<b>>False Positive Check:<i</b>><i</cg>><i<br>>"
-    Reason = Reason + "Manually analyze the responses received for the three payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with different strings and check if this behaviour is repeated."
-    Reason = Reason + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
-    return Reason
+    FalsePositiveCheck = "Manually analyze the responses received for the three payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with different strings and check if this behaviour is repeated."
+    FalsePositiveCheck = FalsePositiveCheck + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
+    
+    FR = FindingReason(Reason, ReasonType, [Trigger-2, Trigger-1, Trigger], FalsePositiveCheck)
+    return FR
 
   def GetBlindBoolReason(self, payloads, bool_cond, Trigger):
     bool_cond = bool_cond.upper()
@@ -901,16 +951,14 @@ class SQLInjection(ActivePlugin):
     Reason = Reason + "If the application was not actually evaluating the boolean condition then all four payload should have returned very similar responses. "
     Reason = Reason + "Therefore this indicates that SQL syntax from the payload is executed as part of the SQL query on the server."
     
-    #Trigger
-    Reason = Reason + "<i<br>><i<br>>The request and response associated with this check can be seen by clicking on Triggers {0}, {1}, {2} and {3}.".format(Trigger-3, Trigger-2, Trigger-1, Trigger)
-    Reason = Reason + "<i<br>>Doing a right-click on a Trigger id will show a menu with options to resend selected request or to send it after editing. Click on the 'Select this Request for Manual Testing' option in that menu for this feature."
+    ReasonType = "Bool"
     
     #False Positive Check
-    Reason = Reason + "<i<br>><i<br>><i<cg>><i<b>>False Positive Check:<i</b>><i</cg>><i<br>>"
-    Reason = Reason + "Manually analyze the responses received for the four payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with values in the boolean expression and check if this behaviour is repeated."
-    Reason = Reason + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
-    return Reason
-
+    FalsePositiveCheck = "Manually analyze the responses received for the four payloads and confirm if the type of similarity explained above actually exists in them. Try resending the same payloads again but with values in the boolean expression and check if this behaviour is repeated."
+    FalsePositiveCheck = FalsePositiveCheck + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
+    
+    FR = FindingReason(Reason, ReasonType, [Trigger-3, Trigger-2, Trigger-1, Trigger], FalsePositiveCheck)
+    return FR
 
   def GetBlindTimeReason(self, payload, delay_time, res_time, normal_time, Trigger):
     payload  = Tools.EncodeForTrace(payload)
@@ -927,15 +975,14 @@ class SQLInjection(ActivePlugin):
     Reason = Reason + "Normally this particular request is processed at around <i</hlg>>{0}<i</hlg>> milliseconds. ".format(normal_time)
     Reason = Reason + "This indicates that the injected SQL code snippet could have been executed on the server-side."
     
-    #Trigger
-    Reason = Reason + "<i<br>><i<br>>The request and response associated with this check can be seen by clicking on Trigger {0}.".format(Trigger)
-    Reason = Reason + "<i<br>>Doing a right-click on a Trigger id will show a menu with options to resend selected request or to send it after editing. Click on the 'Select this Request for Manual Testing' option in that menu for this feature."
+    ReasonType = "TimeDelay"
     
     #False Positive Check
-    Reason = Reason + "<i<br>><i<br>><i<cg>><i<b>>False Positive Check:<i</b>><i</cg>><i<br>>"
-    Reason = Reason + "To check if this was a valid case or a false positive you can manually inject the same payload but by changing the number of seconds of delay to different values. Then you can observe if the time taken for the response to be returned is affected accordingly."
-    Reason = Reason + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
-    return Reason
+    FalsePositiveCheck = "To check if this was a valid case or a false positive you can manually inject the same payload but by changing the number of seconds of delay to different values. Then you can observe if the time taken for the response to be returned is affected accordingly."
+    FalsePositiveCheck = FalsePositiveCheck + "<i<br>>If you discover that this issue was a false positive then please consider reporting this to <i<cb>>lava@ironwasp.org<i</cb>>. Your feedback will help improve the accuracy of the scanner."
+    
+    FR = FindingReason(Reason, ReasonType, Trigger, FalsePositiveCheck)
+    return FR
 
 
 p = SQLInjection()

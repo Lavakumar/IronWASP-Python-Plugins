@@ -17,7 +17,7 @@ class DOMXSS(PassivePlugin):
 	def GetInstance(self):
 		p = DOMXSS()
 		p.Name = "DOMXSSChecker"
-		p.Version = "0.2"
+		p.Version = "0.4"
 		p.Description = "Passive plugin that checks the JavaScript in HTTP Response for DOM XSS Sources and Sinks."
 		#When should this plugin be called. Possible values - BeforeInterception, AfterInterception, Both, Offline. Offline is the default value, it is also the recommended value if you are not going to perform any changes in the Request/Response
 		#p.CallingState = PluginCallingState.BeforeInterception
@@ -26,7 +26,7 @@ class DOMXSS(PassivePlugin):
 		return p
 	
 	#Override the Check method of the base class with custom functionlity
-	def Check(self, Sess, Results):	
+	def Check(self, Sess, Results, ReportAll):	
 		if(Sess.Request == None):
 			return
 		if(Sess.Response == None):
@@ -65,7 +65,7 @@ class DOMXSS(PassivePlugin):
 			return
 		
 		Signature = '{0}|{1}|{2}|{3}'.format(Sess.Request.UrlPath, Sess.Request.Method, ":".join(source_matches), ":".join(sink_matches))
-		if self.IsSignatureUnique(Sess.Request.Host, PluginResultType.TestLead, Signature):
+		if ReportAll or self.IsSignatureUnique(Sess.Request.BaseUrl, FindingType.TestLead, Signature):
 			Title = ""
 			Summary = ""			
 			if((len(source_matches) > 0) and (len(sink_matches) > 0)):
@@ -91,11 +91,11 @@ class DOMXSS(PassivePlugin):
 					sink_trace.append("	{0}<i<br>>".format(m))
 				Summary = "{0}{1}{2}".format(Summary, trace_title, "".join(sink_trace))
 			
-			PR = PluginResult(Sess.Request.Host)
+			PR = Finding(Sess.Request.BaseUrl)
 			PR.Title = Title
 			PR.Summary = Summary
-			PR.Triggers.Add("", Sess.Request, "", Sess.Response);
-			PR.ResultType = PluginResultType.TestLead;
+			PR.Triggers.Add("", "", Sess.Request, "\r\n".join(source_matches) + "\r\n" + "\r\n".join(sink_matches), "{0} DOM XSS Sources and {1} DOM XSS Sinks were found in the JavaScript contained in this response body".format(len(source_matches), len(sink_matches)), Sess.Response)
+			PR.Type = FindingType.TestLead;
 			PR.Signature = Signature
 			Results.Add(PR)
 			
